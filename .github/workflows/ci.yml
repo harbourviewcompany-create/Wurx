@@ -7,9 +7,29 @@ on:
     branches: ["main"]
 
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # This repo is public, so GitHub's native secret scanning already
+      # auto-revokes known partner token formats (e.g. GitHub PATs, Stripe
+      # keys) on push. Gitleaks here is defense-in-depth for secrets that
+      # scanning doesn't catch: DATABASE_URL passwords, custom API keys,
+      # SUPABASE_SERVICE_ROLE_KEY, etc. Fails the build on any match.
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   typecheck-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: secret-scan
 
     steps:
       - name: Checkout
@@ -21,12 +41,8 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      # NOTE: no package-lock.json is currently committed to this repo, so
-      # `npm ci` (the fast, reproducible install `actions/setup-node` caching
-      # expects) is not usable yet. Using `npm install` as a stopgap.
-      # Commit a lockfile and switch this to `npm ci` — see accompanying review.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate

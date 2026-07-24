@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-06-30.acacia' // Update as needed
+  apiVersion: '2025-02-24.acacia' // Pinned to match installed stripe SDK's expected type; update both together
 })
 
 export async function createCheckoutSession(email: string, priceId: string) {
