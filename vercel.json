@@ -1,3 +1,15 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://rzdavbuoisckvdapbcbj.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz",
+    "NEXT_PUBLIC_SITE_URL": "https://wurx.vercel.app"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "https://rzdavbuoisckvdapbcbj.supabase.co",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz",
+      "NEXT_PUBLIC_SITE_URL": "https://wurx.vercel.app"
+    }
+  }
 }
