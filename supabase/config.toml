@@ -1,0 +1,11 @@
+# Supabase local/CLI config for the Wurx project (ref: rzdavbuoisckvdapbcbj).
+project_id = "rzdavbuoisckvdapbcbj"
+
+# Stripe checkout — requires a signed-in user, so keep JWT verification on.
+[functions.create-checkout]
+verify_jwt = true
+
+# Stripe webhook — Stripe cannot present a Supabase JWT; it is authenticated by
+# the webhook signature inside the function. JWT verification must stay OFF.
+[functions.stripe-webhook]
+verify_jwt = false
