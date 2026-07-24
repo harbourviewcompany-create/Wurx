@@ -186,9 +186,12 @@ begin
 end;
 $$;
 
-revoke all on function public.request_booking(uuid, timestamptz, int, text, text, text, text) from public;
-revoke all on function public.cancel_booking(uuid) from public;
-revoke all on function public.complete_booking(uuid) from public;
+-- Supabase default-grants EXECUTE on new public functions to anon + authenticated.
+-- Revoke anon/public so only signed-in users can call these RPCs (each function
+-- still re-checks auth.uid() internally).
+revoke all on function public.request_booking(uuid, timestamptz, int, text, text, text, text) from anon, public;
+revoke all on function public.cancel_booking(uuid) from anon, public;
+revoke all on function public.complete_booking(uuid) from anon, public;
 grant execute on function public.request_booking(uuid, timestamptz, int, text, text, text, text) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.complete_booking(uuid) to authenticated;
