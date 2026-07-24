@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # NOTE: no package-lock.json is currently committed to this repo, so
+      # `npm ci` (the fast, reproducible install `actions/setup-node` caching
+      # expects) is not usable yet. Using `npm install` as a stopgap.
+      # Commit a lockfile and switch this to `npm ci` — see accompanying review.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Runs against the whole repo, including files not wired into any
+      # Next.js route (e.g. backend/src/**). next build's typecheck only
+      # covers files reachable from the app's route graph, so this step
+      # catches dead-but-broken code that next build would silently skip.
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # next build runs its own TypeScript check plus actually compiles the
+      # app. DATABASE_URL is required for @prisma/client to construct at
+      # module load (lib/db.ts). No live DB connection is made during build,
+      # so a syntactically valid placeholder is sufficient here — this is
+      # NOT a real credential and must not be treated as one.
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_build_placeholder"
