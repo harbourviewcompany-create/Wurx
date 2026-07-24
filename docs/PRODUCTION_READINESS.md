@@ -24,47 +24,43 @@ that isn't available through the automated tooling), 🔭 = phase 2.
   | Home | $339/mo CAD | `price_1TwrHZHGqu2rN3IeEx6f5bzV` |
   | Plus | $629/mo CAD | `price_1TwrHyHGqu2rN3IeTP0gbIBV` |
 
-## ⛳ Remaining to go live (owner action — needs dashboard / secret access)
+## ✅ Also now done
 
-### 1. Vercel environment variables (`wurx` project)
-The deployed app builds but pages 500 at runtime until these are set (Production
-+ Preview), then redeploy:
+- **Vercel env** — the public Supabase URL + publishable key + site URL are baked
+  into `vercel.json`, so production and previews render without dashboard config.
+- **Stripe webhook created & wired** — a live webhook endpoint
+  (`…/functions/v1/stripe-webhook`, events `checkout.session.completed`,
+  `invoice.paid`, `customer.subscription.updated/deleted`) is registered, and its
+  signing secret is stored in **Supabase Vault**. The `stripe-webhook` function
+  (v3) reads it via the service-role-only `public.get_app_secret` RPC — no secret
+  in env or in this repo. The handler records subscriptions and grants minutes
+  entirely from event payloads, so the **webhook needs no `STRIPE_SECRET_KEY`**.
 
-| Key | Value |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://rzdavbuoisckvdapbcbj.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz` (publishable — safe to expose) |
-| `NEXT_PUBLIC_SITE_URL` | `https://wurx.vercel.app` |
+## ⛳ Remaining to go live (owner action)
 
-### 2. Stripe webhook + Edge Function secrets
-The `create-checkout` and `stripe-webhook` functions need secrets set with
-`supabase secrets set` (or the dashboard → Edge Functions → Secrets):
+### 1. `STRIPE_SECRET_KEY` for `create-checkout` (the only hard blocker left)
+The `create-checkout` function needs the **live** Stripe secret key (`sk_live_…`)
+to open a Checkout session — that value is never exposed to the assistant tools,
+so only you can supply it. Two options:
 
-- `STRIPE_SECRET_KEY` — the **live** secret key (`sk_live_…`).
-- `SITE_URL` — `https://wurx.vercel.app`.
-- `STRIPE_WEBHOOK_SIGNING_SECRET` — from the webhook endpoint you create next.
+- **Standard:** `supabase secrets set STRIPE_SECRET_KEY=sk_live_… SITE_URL=https://wurx.vercel.app --project-ref rzdavbuoisckvdapbcbj`
+- **Or** paste the key to the assistant and it will store it in Vault and point
+  `create-checkout` at it the same way the webhook works (no Supabase secret needed).
 
-Create a **live** Stripe webhook endpoint pointing at:
+Until this is set, the **Subscribe** button can't start checkout. Everything
+downstream (webhook → subscription record → minute grant → booking) is ready.
 
-```
-https://rzdavbuoisckvdapbcbj.supabase.co/functions/v1/stripe-webhook
-```
+> `create-checkout` runs with `verify_jwt = true`; `stripe-webhook` stays
+> `verify_jwt = false` (see `supabase/config.toml`).
 
-subscribed to: `checkout.session.completed`, `invoice.paid`,
-`customer.subscription.updated`, `customer.subscription.deleted`. Copy its
-signing secret into `STRIPE_WEBHOOK_SIGNING_SECRET`.
-
-> Note: `create-checkout` runs with `verify_jwt = true`; `stripe-webhook` must
-> stay `verify_jwt = false` (see `supabase/config.toml`).
-
-### 3. Supabase Auth settings
+### 2. Supabase Auth settings
 - Set **Site URL** = `https://wurx.vercel.app` and add
   `https://wurx.vercel.app/auth/callback` (and the Vercel preview domains) to the
   allowed **Redirect URLs**.
 - Configure **SMTP** so confirmation emails actually send, or disable email
   confirmation for launch (the signup flow already handles both cases).
 
-### 4. Verify the money path end-to-end (in live or a test clone)
+### 3. Verify the money path end-to-end (in live or a test clone)
 Subscribe → `checkout.session.completed` records the subscription →
 `invoice.paid` grants minutes to `hour_ledger` → dashboard shows the balance →
 book a service (holds minutes) → complete (consumes) / cancel (releases).

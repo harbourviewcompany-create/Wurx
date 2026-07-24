@@ -1,17 +1,47 @@
 // Deployed to Supabase project rzdavbuoisckvdapbcbj (verify_jwt = false — Stripe
 // authenticates via the webhook signature, not a Supabase JWT).
-// This file mirrors the live function; keep them in sync — redeploy with:
+//
+// The webhook signing secret is stored in Supabase Vault (not in env or in this
+// file) and read at runtime via the service-role-only RPC public.get_app_secret,
+// so no secret lives in this public repo. Redeploy with:
 //   supabase functions deploy stripe-webhook --no-verify-jwt
+//
+// This handler is self-contained: it records/updates subscriptions and grants
+// minutes entirely from the event payloads, so it does NOT require STRIPE_SECRET_KEY.
+// (create-checkout still needs STRIPE_SECRET_KEY to start a Checkout session.)
 import Stripe from 'npm:stripe@^17'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
+// Only used for signature verification (constructEventAsync), which does not call
+// the Stripe API — so a real secret key is not required here.
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? 'sk_webhook_verification_only')
 const cryptoProvider = Stripe.createSubtleCryptoProvider()
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
+
+async function getSigningSecret(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_app_secret', {
+    p_name: 'STRIPE_WEBHOOK_SIGNING_SECRET',
+  })
+  if (error) {
+    console.error('Failed to read signing secret from Vault:', error.message)
+    return null
+  }
+  return (data as string) ?? null
+}
+
+function periodDates(sub: Stripe.Subscription) {
+  const item = sub.items?.data?.[0] as any
+  const start = (sub as any).current_period_start ?? item?.current_period_start
+  const end = (sub as any).current_period_end ?? item?.current_period_end
+  return {
+    current_period_start: start ? new Date(start * 1000).toISOString() : null,
+    current_period_end: end ? new Date(end * 1000).toISOString() : null,
+  }
+}
 
 Deno.serve(async (req: Request) => {
   const signature = req.headers.get('Stripe-Signature')
@@ -21,13 +51,17 @@ Deno.serve(async (req: Request) => {
     return new Response('Missing Stripe-Signature header', { status: 400 })
   }
 
-  let event: Stripe.Event
+  const signingSecret = await getSigningSecret()
+  if (!signingSecret) {
+    return new Response('Webhook signing secret not configured', { status: 500 })
+  }
 
+  let event: Stripe.Event
   try {
     event = await stripe.webhooks.constructEventAsync(
       body,
       signature,
-      Deno.env.get('STRIPE_WEBHOOK_SIGNING_SECRET')!,
+      signingSecret,
       undefined,
       cryptoProvider
     )
@@ -39,39 +73,41 @@ Deno.serve(async (req: Request) => {
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
+        // Record the subscription from the session payload — no Stripe API call.
         const session = event.data.object as Stripe.Checkout.Session
         const userId = session.metadata?.userId
-        const planId = session.metadata?.plan_id
+        const planId = session.metadata?.plan_id ?? null
         const stripeSubscriptionId = session.subscription as string | null
 
         if (userId && stripeSubscriptionId) {
-          const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId)
-          const item = sub.items.data[0]
-          const periodStart = (sub as any).current_period_start ?? item?.current_period_start
-          const periodEnd = (sub as any).current_period_end ?? item?.current_period_end
+          // Look the plan's price id up locally (nice-to-have, still no Stripe call).
+          let stripePriceId: string | null = null
+          if (planId) {
+            const { data: plan } = await supabase
+              .from('plans')
+              .select('stripe_price_id')
+              .eq('id', planId)
+              .single()
+            stripePriceId = plan?.stripe_price_id ?? null
+          }
 
-          await supabase
-            .from('subscriptions')
-            .upsert(
-              {
-                user_id: userId,
-                plan_id: planId ?? null,
-                stripe_subscription_id: sub.id,
-                stripe_price_id: item?.price.id ?? null,
-                status: sub.status,
-                current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-                current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-                cancel_at_period_end: sub.cancel_at_period_end,
-              },
-              { onConflict: 'stripe_subscription_id' }
-            )
+          await supabase.from('subscriptions').upsert(
+            {
+              user_id: userId,
+              plan_id: planId,
+              stripe_subscription_id: stripeSubscriptionId,
+              stripe_price_id: stripePriceId,
+              status: 'active',
+            },
+            { onConflict: 'stripe_subscription_id' }
+          )
         }
         break
       }
 
       case 'invoice.paid': {
         const invoice = event.data.object as Stripe.Invoice
-        const stripeSubscriptionId = invoice.subscription as string | null
+        const stripeSubscriptionId = (invoice as any).subscription as string | null
         if (!stripeSubscriptionId) break
 
         const { data: subRow } = await supabase
@@ -81,6 +117,23 @@ Deno.serve(async (req: Request) => {
           .single()
 
         if (!subRow) break
+
+        // Keep the subscription period fresh from the invoice line (no Stripe call).
+        const line = (invoice as any).lines?.data?.[0]
+        if (line?.period) {
+          await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              current_period_start: line.period.start
+                ? new Date(line.period.start * 1000).toISOString()
+                : null,
+              current_period_end: line.period.end
+                ? new Date(line.period.end * 1000).toISOString()
+                : null,
+            })
+            .eq('id', subRow.id)
+        }
 
         let monthlyMinutes: number | null = null
         if (subRow.plan_id) {
@@ -93,8 +146,8 @@ Deno.serve(async (req: Request) => {
         }
 
         if (monthlyMinutes) {
-          // stripe_event_id is UNIQUE in hour_ledger, so retried webhook deliveries
-          // (Stripe retries on any non-2xx) can never double-credit the same invoice event.
+          // stripe_event_id is UNIQUE in hour_ledger, so Stripe's retries (on any
+          // non-2xx) can never double-credit the same invoice event.
           await supabase.from('hour_ledger').insert({
             user_id: subRow.user_id,
             delta_minutes: monthlyMinutes,
@@ -107,20 +160,16 @@ Deno.serve(async (req: Request) => {
         break
       }
 
+      case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
-        const item = sub.items.data[0]
-        const periodStart = (sub as any).current_period_start ?? item?.current_period_start
-        const periodEnd = (sub as any).current_period_end ?? item?.current_period_end
-
         await supabase
           .from('subscriptions')
           .update({
             status: sub.status,
-            current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-            current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
             cancel_at_period_end: sub.cancel_at_period_end,
+            ...periodDates(sub),
           })
           .eq('stripe_subscription_id', sub.id)
         break
@@ -130,8 +179,8 @@ Deno.serve(async (req: Request) => {
         break
     }
   } catch (err) {
-    // Log but still ack so Stripe doesn't retry forever on a bug on our end;
-    // the stripe_event_id unique constraint means a safe retry never double-credits.
+    // Log but still ack so Stripe doesn't retry forever on a bug on our end; the
+    // stripe_event_id unique constraint means a safe retry never double-credits.
     console.error(`Error handling ${event.type}:`, err)
   }
 
