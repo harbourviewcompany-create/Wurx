@@ -36,22 +36,23 @@ that isn't available through the automated tooling), 🔭 = phase 2.
   in env or in this repo. The handler records subscriptions and grants minutes
   entirely from event payloads, so the **webhook needs no `STRIPE_SECRET_KEY`**.
 
+## ✅ Stripe server key wired too
+
+`create-checkout` (v3) now reads its Stripe **server key** from Supabase Vault
+(name `STRIPE_SECRET_KEY`) via `public.get_app_secret`, same pattern as the
+webhook. A live restricted key (`rk_live_…`) is stored there.
+
+> The restricted key must have these Stripe permissions or checkout will error on
+> first use: **Checkout Sessions: Write**, **Customers: Write**, **Prices/Products:
+> Read**. If a subscribe attempt returns a permissions error, widen the key's
+> scopes in the Stripe Dashboard (or store a full `sk_live_…` in Vault instead).
+
 ## ⛳ Remaining to go live (owner action)
 
-### 1. `STRIPE_SECRET_KEY` for `create-checkout` (the only hard blocker left)
-The `create-checkout` function needs the **live** Stripe secret key (`sk_live_…`)
-to open a Checkout session — that value is never exposed to the assistant tools,
-so only you can supply it. Two options:
-
-- **Standard:** `supabase secrets set STRIPE_SECRET_KEY=sk_live_… SITE_URL=https://wurx.vercel.app --project-ref rzdavbuoisckvdapbcbj`
-- **Or** paste the key to the assistant and it will store it in Vault and point
-  `create-checkout` at it the same way the webhook works (no Supabase secret needed).
-
-Until this is set, the **Subscribe** button can't start checkout. Everything
-downstream (webhook → subscription record → minute grant → booking) is ready.
-
-> `create-checkout` runs with `verify_jwt = true`; `stripe-webhook` stays
-> `verify_jwt = false` (see `supabase/config.toml`).
+### 1. Live end-to-end test
+Do one real subscribe on `wurx.vercel.app` (a signed-in user → Subscribe → Stripe
+Checkout → back to dashboard). Watch `hour_ledger` for the `grant` entry. This is
+the only way to confirm the restricted key's scopes and the full money path.
 
 ### 2. Supabase Auth settings
 - Set **Site URL** = `https://wurx.vercel.app` and add
