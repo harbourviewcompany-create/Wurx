@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes, formatPrice } from '@/lib/format'
 import { PlanCheckoutButton } from '@/components/PlanCheckoutButton'
@@ -50,7 +51,7 @@ export default async function PricingPage() {
 
   return (
     <section className="container section center">
-      <div className="hero" style={{ paddingBottom: 8 }}>
+      <div className="hero rise" style={{ paddingBottom: 8 }}>
         <span className="eyebrow">Membership plans</span>
         <h1>
           One plan. <span className="gradient-text">Your whole home.</span>
@@ -109,10 +110,22 @@ export default async function PricingPage() {
         <p className="muted">Plans are being set up. Check back soon.</p>
       )}
 
-      <p className="hero-note">
-        No contracts · cancel anytime ·{' '}
+      <div className="trust-row" style={{ marginTop: 30 }}>
+        <span>
+          <ShieldCheck size={16} /> Vetted &amp; insured pros
+        </span>
+        <span>
+          <Check size={16} /> No contracts, cancel anytime
+        </span>
+        <span>
+          <Check size={16} /> Unused minutes never wasted
+        </span>
+      </div>
+
+      <p className="form-note">
+        Not sure yet?{' '}
         <Link href="/services" style={{ color: 'var(--brand)' }}>
-          see what&apos;s included
+          See everything that&apos;s included
         </Link>
       </p>
     </section>
