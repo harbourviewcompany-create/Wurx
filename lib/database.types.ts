@@ -705,6 +705,7 @@ export type Database = {
         Returns: undefined
       }
       admin_cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      admin_unassign_booking: { Args: { p_booking_id: string }; Returns: undefined }
       admin_set_provider_status: {
         Args: {
           p_is_active: boolean

@@ -106,13 +106,18 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          <Link
-            href="/pricing"
-            className="btn btn-primary btn-lg"
-            style={{ minWidth: 240 }}
-          >
-            Choose your plan
-          </Link>
+          <div className="cta-stack">
+            <Link
+              href="/pricing"
+              className="btn btn-primary btn-lg"
+              style={{ minWidth: 240 }}
+            >
+              Choose your plan
+            </Link>
+            <Link href="/dashboard/book" className="link-quiet">
+              or browse what we do first →
+            </Link>
+          </div>
 
           <div className="trust-row" style={{ marginTop: 22 }}>
             <span>

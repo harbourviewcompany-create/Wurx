@@ -55,11 +55,11 @@ export async function assignProvider(formData: FormData) {
   const providerId = String(formData.get('providerId') || '')
 
   if (!providerId) {
-    // Unassign: hand the job back to the open pool.
-    const { error } = await supabase
-      .from('bookings')
-      .update({ provider_id: null, status: 'requested' })
-      .eq('id', bookingId)
+    // Unassign via RPC: a raw update had no status predicate, so it could
+    // reopen a completed/cancelled booking and left the accepted offer dangling.
+    const { error } = await supabase.rpc('admin_unassign_booking', {
+      p_booking_id: bookingId,
+    })
     if (error) throw new Error(error.message)
   } else {
     // Go through the RPC so assignment also sets status = 'confirmed', records

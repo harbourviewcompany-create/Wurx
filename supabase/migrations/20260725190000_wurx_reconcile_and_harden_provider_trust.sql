@@ -53,11 +53,9 @@ as $$
 begin
   if auth.uid() is not null
      and new.role is distinct from old.role
-     and new.role = 'admin'
-     and old.role <> 'admin'
      and not public.is_admin()
   then
-    raise exception 'Only an admin can grant the admin role' using errcode = '42501';
+    raise exception 'Only an admin can change a profile role' using errcode = '42501';
   end if;
   return new;
 end;
@@ -80,6 +78,12 @@ create trigger profiles_guard_role_change
 -- The 'wurx.rating_sync' escape hatch below lets refresh_provider_rating()
 -- (a SECURITY DEFINER trigger on public.reviews that still runs with auth.uid()
 -- set) write providers.rating without the guard reverting it.
+--
+-- 'wurx.rating_sync' is a NON-RESERVED custom GUC, so any authenticated caller
+-- can set it themselves and then UPDATE providers directly. The flag alone is
+-- therefore worthless as a trust signal: it must be paired with
+-- pg_trigger_depth() > 1, which only holds inside a nested trigger and cannot
+-- be forged from a client statement.
 create or replace function public.guard_provider_privileged_columns()
 returns trigger
 language plpgsql
@@ -87,7 +91,9 @@ security definer
 set search_path to 'public', 'pg_temp'
 as $$
 begin
-  if coalesce(current_setting('wurx.rating_sync', true), 'off') = 'on' then
+  if coalesce(current_setting('wurx.rating_sync', true), 'off') = 'on'
+     and pg_trigger_depth() > 1
+  then
     return new;
   end if;
 
@@ -147,6 +153,14 @@ drop policy if exists providers_select_public on public.providers;
 create policy providers_select_public on public.providers
   for select to anon, authenticated
   using (is_active and verification = 'verified');
+
+-- Providers must still be able to read their OWN row — signup creates it
+-- unverified/inactive, which the public policy above deliberately hides, and
+-- the provider dashboard/profile pages read it.
+drop policy if exists providers_select_own on public.providers;
+create policy providers_select_own on public.providers
+  for select to authenticated
+  using (auth.uid() = user_id);
 
 -- =====================================================================
 -- 4. Reconcile the hardened definitions that existed only in the live DB.
@@ -248,9 +262,21 @@ create policy bookings_select_open_for_providers on public.bookings
     and exists (
       select 1 from public.providers p
       where p.user_id = auth.uid()
+        -- cheap prefilter so the expensive eligibility function runs on fewer rows
+        and p.is_active
+        and p.verification = 'verified'
         and public.provider_can_serve_booking(p.id, bookings.id)
     )
   );
+
+-- Supporting indexes for the dispatch hot path.
+create index if not exists bookings_open_dispatch_idx
+  on public.bookings (scheduled_start)
+  where status = 'requested' and provider_id is null;
+create index if not exists provider_availability_provider_dow_idx
+  on public.provider_availability (provider_id, day_of_week);
+create index if not exists provider_blackouts_provider_window_idx
+  on public.provider_blackouts (provider_id, starts_at, ends_at);
 
 -- Claim: verified + eligible only, with row locking to prevent double-claims.
 create or replace function public.claim_booking(p_booking_id uuid)
@@ -308,6 +334,11 @@ grant execute on function public.claim_booking(uuid) to authenticated;
 -- sets status and records the job_offer — which the admin UI's plain
 -- `update({provider_id})` never did.
 -- =====================================================================
+-- The earlier migration created admin_assign_booking(uuid, uuid). Adding a
+-- defaulted third argument creates an OVERLOAD, not a replacement, which makes
+-- two-argument named calls ambiguous — drop the old signature first.
+drop function if exists public.admin_assign_booking(uuid, uuid);
+
 create or replace function public.admin_assign_booking(
   p_booking_id uuid,
   p_provider_id uuid,
@@ -335,6 +366,11 @@ begin
     raise exception 'Booking is not open for assignment';
   end if;
 
+  -- Retire any earlier accepted offer so the history has a single active offer.
+  update public.job_offers
+  set status = 'withdrawn', responded_at = now()
+  where booking_id = p_booking_id and status = 'accepted';
+
   insert into public.job_offers (booking_id, provider_id, status, offered_at, responded_at)
   values (p_booking_id, p_provider_id, 'accepted', now(), now());
 end;
@@ -342,3 +378,44 @@ $$;
 
 revoke all on function public.admin_assign_booking(uuid, uuid, boolean) from public, anon;
 grant execute on function public.admin_assign_booking(uuid, uuid, boolean) to authenticated;
+
+-- =====================================================================
+-- 6. State-checked unassignment.
+--
+-- The admin UI previously unassigned with a raw update carrying no status
+-- predicate, which could reopen a completed or cancelled booking, and left the
+-- accepted job_offer dangling.
+-- =====================================================================
+create or replace function public.admin_unassign_booking(p_booking_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $$
+declare
+  v_booking record;
+begin
+  if not public.is_admin() then
+    raise exception 'Not authorised' using errcode = '42501';
+  end if;
+
+  select * into v_booking from public.bookings where id = p_booking_id for update;
+  if v_booking.id is null then
+    raise exception 'Booking not found';
+  end if;
+  if v_booking.status not in ('requested', 'confirmed') then
+    raise exception 'Only upcoming bookings can be unassigned';
+  end if;
+
+  update public.job_offers
+  set status = 'withdrawn', responded_at = now()
+  where booking_id = p_booking_id and status = 'accepted';
+
+  update public.bookings
+  set provider_id = null, status = 'requested', updated_at = now()
+  where id = p_booking_id;
+end;
+$$;
+
+revoke all on function public.admin_unassign_booking(uuid) from public, anon;
+grant execute on function public.admin_unassign_booking(uuid) to authenticated;
