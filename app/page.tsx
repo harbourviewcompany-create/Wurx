@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes, formatPrice } from '@/lib/format'
+import { ServiceIcon } from '@/components/ServiceIcon'
 
 export const revalidate = 300
 
@@ -44,8 +45,8 @@ export default async function Home() {
         <div className="grid grid-3">
           {(services ?? []).map((s) => (
             <div key={s.slug} className="card">
-              <h3>
-                {s.icon ? `${s.icon} ` : ''}
+              <h3 className="card-heading">
+                <ServiceIcon name={s.icon} />
                 {s.name}
               </h3>
               <p className="muted">{s.description ?? 'Booked with your plan minutes.'}</p>

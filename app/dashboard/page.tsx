@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
+import { ServiceIcon } from '@/components/ServiceIcon'
 
 export const dynamic = 'force-dynamic'
 
@@ -136,8 +137,8 @@ export default async function Dashboard() {
             return (
               <div key={b.id} className="list-row">
                 <div>
-                  <strong>
-                    {service?.icon ? `${service.icon} ` : ''}
+                  <strong className="card-heading">
+                    <ServiceIcon name={service?.icon} size={16} />
                     {service?.name ?? 'Service'}
                   </strong>
                   <div className="muted" style={{ fontSize: 14 }}>

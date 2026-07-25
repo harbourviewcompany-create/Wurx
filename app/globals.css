@@ -57,12 +57,15 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   height: 62px;
+  position: relative;
 }
 .brand {
   font-weight: 800;
   letter-spacing: -0.02em;
   font-size: 20px;
+  flex-shrink: 0;
 }
 .brand span {
   color: var(--brand);
@@ -78,6 +81,89 @@ a {
 }
 .nav a:hover {
   color: var(--text);
+}
+
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-toggle-bar,
+.nav-toggle-bar::before,
+.nav-toggle-bar::after {
+  content: '';
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--text);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.nav-toggle-bar::before {
+  transform: translateY(-5px);
+}
+.nav-toggle-bar::after {
+  transform: translateY(3px);
+}
+.nav-toggle-bar.open {
+  background: transparent;
+}
+.nav-toggle-bar.open::before {
+  transform: translateY(0) rotate(45deg);
+}
+.nav-toggle-bar.open::after {
+  transform: translateY(-2px) rotate(-45deg);
+}
+
+/* Card heading with an icon */
+.card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .nav-toggle {
+    display: flex;
+  }
+  .nav {
+    display: none;
+    position: absolute;
+    top: 62px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 10px 20px 16px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  }
+  .nav.nav-open {
+    display: flex;
+  }
+  .nav a,
+  .nav form {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav a:last-of-type {
+    border-bottom: none;
+  }
+  .nav .btn {
+    width: 100%;
+    margin-top: 4px;
+  }
 }
 
 /* Buttons */

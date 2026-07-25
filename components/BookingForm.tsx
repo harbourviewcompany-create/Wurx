@@ -105,7 +105,6 @@ export function BookingForm({
       >
         {services.map((s) => (
           <option key={s.id} value={s.id}>
-            {s.icon ? `${s.icon} ` : ''}
             {s.name}
           </option>
         ))}
