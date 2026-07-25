@@ -151,6 +151,30 @@ a {
   flex-shrink: 0;
 }
 
+.admin-nav {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.admin-nav a {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.admin-nav a:hover {
+  color: var(--text);
+}
+
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .nav-toggle {
     display: flex;
