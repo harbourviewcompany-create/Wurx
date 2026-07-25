@@ -147,6 +147,20 @@ export default async function Home() {
           })}
         </div>
       </section>
+
+      <section className="container section">
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Are you a pro?</h2>
+          <p className="muted">
+            Offer cleaning, snow removal, lawn care, handyman work or more?
+            Set up your profile and start claiming jobs in Ottawa — no
+            recruiter, no waiting.
+          </p>
+          <Link href="/become-a-pro" className="btn btn-primary">
+            Become a Wurx pro
+          </Link>
+        </div>
+      </section>
     </>
   )
 }

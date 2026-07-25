@@ -59,20 +59,12 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "bookings_service_id_fkey"
-            columns: ["service_id"]
-            isOneToOne: false
-            referencedRelation: "services"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bookings_provider_id_fkey"
-            columns: ["provider_id"]
-            isOneToOne: false
-            referencedRelation: "providers"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_service_id_fkey"; columns: ["service_id"]; isOneToOne: false; referencedRelation: "services"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       hour_holds: {
@@ -103,7 +95,12 @@ export type Database = {
           status?: Database["public"]["Enums"]["hold_status"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "hour_holds_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "hour_holds_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "hour_holds_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "hour_holds_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
       }
       hour_ledger: {
         Row: {
@@ -139,7 +136,13 @@ export type Database = {
           subscription_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "hour_ledger_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "hour_ledger_subscription_id_fkey"; columns: ["subscription_id"]; isOneToOne: false; referencedRelation: "subscriptions"; referencedColumns: ["id"] },
+          { foreignKeyName: "hour_ledger_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "hour_ledger_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "hour_ledger_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
       }
       job_offers: {
         Row: {
@@ -169,7 +172,11 @@ export type Database = {
           responded_at?: string | null
           status?: Database["public"]["Enums"]["offer_status"]
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "job_offers_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "job_offers_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "job_offers_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+        ]
       }
       plans: {
         Row: {
@@ -283,7 +290,10 @@ export type Database = {
           provider_id?: string
           start_minute?: number
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "provider_availability_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_availability_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+        ]
       }
       provider_blackouts: {
         Row: {
@@ -307,7 +317,10 @@ export type Database = {
           reason?: string | null
           starts_at?: string
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "provider_blackouts_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_blackouts_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+        ]
       }
       provider_earnings: {
         Row: {
@@ -343,7 +356,11 @@ export type Database = {
           provider_id?: string
           worked_minutes?: number
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "provider_earnings_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+        ]
       }
       providers: {
         Row: {
@@ -369,17 +386,54 @@ export type Database = {
           verification: Database["public"]["Enums"]["verification_status"]
         }
         Insert: {
-          business_name: string
-          user_id?: string | null
-        }
-        Update: {
+          background_check_at?: string | null
+          base_postal_code?: string | null
           bio?: string | null
-          business_name?: string
+          business_name: string
+          created_at?: string
+          date_of_birth?: string | null
+          guardian_consent_at?: string | null
+          id?: string
+          insurance_expires_at?: string | null
           is_active?: boolean
+          is_minor?: boolean
+          payouts_enabled?: boolean
+          rating?: number | null
           service_areas?: string[]
           service_slugs?: string[]
+          stripe_account_id?: string | null
+          travel_radius_km?: number
+          updated_at?: string
+          user_id?: string | null
+          verification?: Database["public"]["Enums"]["verification_status"]
         }
-        Relationships: []
+        Update: {
+          background_check_at?: string | null
+          base_postal_code?: string | null
+          bio?: string | null
+          business_name?: string
+          created_at?: string
+          date_of_birth?: string | null
+          guardian_consent_at?: string | null
+          id?: string
+          insurance_expires_at?: string | null
+          is_active?: boolean
+          is_minor?: boolean
+          payouts_enabled?: boolean
+          rating?: number | null
+          service_areas?: string[]
+          service_slugs?: string[]
+          stripe_account_id?: string | null
+          travel_radius_km?: number
+          updated_at?: string
+          user_id?: string | null
+          verification?: Database["public"]["Enums"]["verification_status"]
+        }
+        Relationships: [
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
       }
       reviews: {
         Row: {
@@ -401,10 +455,22 @@ export type Database = {
           rating: number
         }
         Update: {
+          author_id?: string
+          booking_id?: string
           comment?: string | null
+          created_at?: string
+          id?: string
+          provider_id?: string | null
           rating?: number
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "reviews_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "reviews_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "reviews_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "reviews_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "reviews_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "reviews_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+        ]
       }
       services: {
         Row: {
@@ -422,12 +488,32 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          created_at?: string
+          credit_multiplier?: number
+          default_duration_minutes?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
           name: string
+          provider_rate_cents_per_hour?: number | null
+          requires_licensed_provider?: boolean
           slug: string
+          sort_order?: number
         }
         Update: {
+          created_at?: string
+          credit_multiplier?: number
+          default_duration_minutes?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
           is_active?: boolean
           name?: string
+          provider_rate_cents_per_hour?: number | null
+          requires_licensed_provider?: boolean
+          slug?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -446,19 +532,36 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id?: string | null
           status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "subscriptions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "plans"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "subscriptions_plan_id_fkey"; columns: ["plan_id"]; isOneToOne: false; referencedRelation: "plans"; referencedColumns: ["id"] },
+          { foreignKeyName: "subscriptions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "subscriptions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "subscriptions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       wurx_ottawa_leads: {
@@ -472,15 +575,22 @@ export type Database = {
           source: string | null
         }
         Insert: {
+          created_at?: string | null
           email: string
+          id?: string
           message?: string | null
           name: string
           phone?: string | null
           source?: string | null
         }
         Update: {
+          created_at?: string | null
           email?: string
+          id?: string
+          message?: string | null
           name?: string
+          phone?: string | null
+          source?: string | null
         }
         Relationships: []
       }
@@ -493,23 +603,92 @@ export type Database = {
           settled_minutes: number | null
           user_id: string | null
         }
+        Insert: {
+          available_minutes?: never
+          held_minutes?: never
+          settled_minutes?: never
+          user_id?: string | null
+        }
+        Update: {
+          available_minutes?: never
+          held_minutes?: never
+          settled_minutes?: never
+          user_id?: string | null
+        }
         Relationships: []
       }
       dispatchable_providers: {
         Row: {
+          background_check_at: string | null
           base_postal_code: string | null
+          bio: string | null
           business_name: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          guardian_consent_at: string | null
           id: string | null
+          insurance_expires_at: string | null
+          is_active: boolean | null
+          is_minor: boolean | null
+          payouts_enabled: boolean | null
           rating: number | null
           service_areas: string[] | null
           service_slugs: string[] | null
+          stripe_account_id: string | null
           travel_radius_km: number | null
+          updated_at: string | null
           user_id: string | null
-          verification:
-            | Database["public"]["Enums"]["verification_status"]
-            | null
+          verification: Database["public"]["Enums"]["verification_status"] | null
         }
-        Relationships: []
+        Insert: {
+          background_check_at?: string | null
+          base_postal_code?: string | null
+          bio?: string | null
+          business_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          guardian_consent_at?: string | null
+          id?: string | null
+          insurance_expires_at?: string | null
+          is_active?: boolean | null
+          is_minor?: boolean | null
+          payouts_enabled?: boolean | null
+          rating?: number | null
+          service_areas?: string[] | null
+          service_slugs?: string[] | null
+          stripe_account_id?: string | null
+          travel_radius_km?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          verification?: Database["public"]["Enums"]["verification_status"] | null
+        }
+        Update: {
+          background_check_at?: string | null
+          base_postal_code?: string | null
+          bio?: string | null
+          business_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          guardian_consent_at?: string | null
+          id?: string | null
+          insurance_expires_at?: string | null
+          is_active?: boolean | null
+          is_minor?: boolean | null
+          payouts_enabled?: boolean | null
+          rating?: number | null
+          service_areas?: string[] | null
+          service_slugs?: string[] | null
+          stripe_account_id?: string | null
+          travel_radius_km?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          verification?: Database["public"]["Enums"]["verification_status"] | null
+        }
+        Relationships: [
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "providers_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
       }
       hour_balances: {
         Row: {
@@ -521,34 +700,25 @@ export type Database = {
       }
     }
     Functions: {
+      cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      claim_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      complete_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      get_app_secret: { Args: { p_name: string }; Returns: string }
       request_booking: {
         Args: {
-          p_service_id: string
-          p_scheduled_start: string
-          p_duration_minutes: number
           p_address_line1: string
           p_city: string
-          p_postal_code: string
+          p_duration_minutes: number
           p_notes: string
+          p_postal_code: string
+          p_scheduled_start: string
+          p_service_id: string
         }
         Returns: string
       }
-      cancel_booking: {
-        Args: { p_booking_id: string }
-        Returns: undefined
-      }
-      complete_booking: {
-        Args: { p_booking_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
-      booking_status:
-        | "requested"
-        | "confirmed"
-        | "in_progress"
-        | "completed"
-        | "cancelled"
+      booking_status: "requested" | "confirmed" | "in_progress" | "completed" | "cancelled"
       hold_status: "active" | "captured" | "released"
       ledger_entry_type: "grant" | "consume" | "adjustment" | "refund" | "expiry"
       offer_status: "offered" | "accepted" | "declined" | "expired" | "withdrawn"
@@ -564,15 +734,147 @@ export type Database = {
       user_role: "customer" | "provider" | "admin"
       verification_status: "unverified" | "pending" | "verified" | "rejected"
     }
-    CompositeTypes: Record<string, never>
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
-type PublicSchema = Database["public"]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
-export type Tables<T extends keyof PublicSchema["Tables"]> =
-  PublicSchema["Tables"][T]["Row"]
-export type Views<T extends keyof PublicSchema["Views"]> =
-  PublicSchema["Views"][T]["Row"]
-export type Enums<T extends keyof PublicSchema["Enums"]> =
-  PublicSchema["Enums"][T]
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      booking_status: ["requested", "confirmed", "in_progress", "completed", "cancelled"],
+      hold_status: ["active", "captured", "released"],
+      ledger_entry_type: ["grant", "consume", "adjustment", "refund", "expiry"],
+      offer_status: ["offered", "accepted", "declined", "expired", "withdrawn"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "incomplete",
+        "incomplete_expired",
+        "unpaid",
+        "paused",
+      ],
+      user_role: ["customer", "provider", "admin"],
+      verification_status: ["unverified", "pending", "verified", "rejected"],
+    },
+  },
+} as const

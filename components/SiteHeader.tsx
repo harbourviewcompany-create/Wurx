@@ -9,13 +9,23 @@ export async function SiteHeader() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  let isProvider = false
+  if (user) {
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    isProvider = !!provider
+  }
+
   return (
     <header className="site-header">
       <div className="container inner">
         <Link href="/" className="brand">
           Wur<span>x</span>
         </Link>
-        <HeaderNav isLoggedIn={!!user} onSignOut={signOut} />
+        <HeaderNav isLoggedIn={!!user} isProvider={isProvider} onSignOut={signOut} />
       </div>
     </header>
   )
