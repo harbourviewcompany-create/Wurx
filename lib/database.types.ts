@@ -357,7 +357,7 @@ export type Database = {
           worked_minutes?: number
         }
         Relationships: [
-          { foreignKeyName: "provider_earnings_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_earnings_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: true; referencedRelation: "bookings"; referencedColumns: ["id"] },
           { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
           { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
         ]
@@ -700,6 +700,16 @@ export type Database = {
       }
     }
     Functions: {
+      admin_assign_booking: { Args: { p_booking_id: string; p_provider_id: string }; Returns: undefined }
+      admin_cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      admin_set_provider_status: {
+        Args: {
+          p_is_active: boolean
+          p_provider_id: string
+          p_verification: Database["public"]["Enums"]["verification_status"]
+        }
+        Returns: undefined
+      }
       cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
       claim_booking: { Args: { p_booking_id: string }; Returns: undefined }
       complete_booking: { Args: { p_booking_id: string }; Returns: undefined }

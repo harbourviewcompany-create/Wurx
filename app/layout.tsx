@@ -19,8 +19,12 @@ export default function RootLayout({
         <SiteHeader />
         <main>{children}</main>
         <footer className="site-footer">
-          <div className="container">
-            © {new Date().getFullYear()} Wurx · Ottawa home services
+          <div className="container inner" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <span>© {new Date().getFullYear()} Wurx · Ottawa home services</span>
+            <span style={{ display: 'flex', gap: 16 }}>
+              <a href="/terms">Terms</a>
+              <a href="/privacy">Privacy</a>
+            </span>
           </div>
         </footer>
       </body>

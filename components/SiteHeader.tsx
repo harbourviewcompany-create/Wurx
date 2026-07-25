@@ -10,13 +10,14 @@ export async function SiteHeader() {
   } = await supabase.auth.getUser()
 
   let isProvider = false
+  let isAdmin = false
   if (user) {
-    const { data: provider } = await supabase
-      .from('providers')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const [{ data: provider }, { data: profile }] = await Promise.all([
+      supabase.from('providers').select('id').eq('user_id', user.id).maybeSingle(),
+      supabase.from('profiles').select('role').eq('id', user.id).single(),
+    ])
     isProvider = !!provider
+    isAdmin = profile?.role === 'admin'
   }
 
   return (
@@ -25,7 +26,7 @@ export async function SiteHeader() {
         <Link href="/" className="brand">
           Wur<span>x</span>
         </Link>
-        <HeaderNav isLoggedIn={!!user} isProvider={isProvider} onSignOut={signOut} />
+        <HeaderNav isLoggedIn={!!user} isProvider={isProvider} isAdmin={isAdmin} onSignOut={signOut} />
       </div>
     </header>
   )
