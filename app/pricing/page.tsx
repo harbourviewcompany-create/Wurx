@@ -5,6 +5,29 @@ import { PlanCheckoutButton } from '@/components/PlanCheckoutButton'
 
 export const revalidate = 60
 
+const PLAN_FEATURES: Record<string, string[]> = {
+  starter: [
+    'Book any service in your area',
+    'Vetted, insured local pros',
+    'Cancel anytime',
+  ],
+  home: [
+    'Everything in Starter',
+    'Priority scheduling',
+    'Best for regular home upkeep',
+  ],
+  plus: [
+    'Everything in Home',
+    'Priority pro matching',
+    'Ideal for larger homes',
+  ],
+}
+const DEFAULT_FEATURES = [
+  'Book any service in your area',
+  'Vetted, insured local pros',
+  'Cancel anytime',
+]
+
 export default async function PricingPage() {
   const supabase = await createClient()
 
@@ -18,11 +41,20 @@ export default async function PricingPage() {
   ])
 
   const user = userData.user
+  const list = plans ?? []
+  // Highlight the middle plan (or the one slugged "home").
+  const featuredIndex =
+    list.findIndex((p) => p.slug === 'home') >= 0
+      ? list.findIndex((p) => p.slug === 'home')
+      : Math.floor(list.length / 2)
 
   return (
-    <section className="container section">
+    <section className="container section center">
       <div className="hero" style={{ paddingBottom: 8 }}>
-        <h1>Plans</h1>
+        <span className="eyebrow">Membership plans</span>
+        <h1>
+          One plan. <span className="gradient-text">Your whole home.</span>
+        </h1>
         <p>
           Every plan is a monthly bank of service minutes. Different services
           spend minutes at different rates — a quick job costs less than a
@@ -30,38 +62,58 @@ export default async function PricingPage() {
         </p>
       </div>
 
-      <div className="grid grid-3">
-        {(plans ?? []).map((p) => (
-          <div key={p.id} className="card">
-            <h3>{p.name}</h3>
-            <div className="price">
-              {formatPrice(p.price_cents)} <small>/ month</small>
+      <div className="plans">
+        {list.map((p, i) => {
+          const featured = i === featuredIndex
+          const features = PLAN_FEATURES[p.slug] ?? DEFAULT_FEATURES
+          return (
+            <div
+              key={p.id}
+              className={`card plan${featured ? ' featured' : ''}`}
+              style={{ textAlign: 'left' }}
+            >
+              {featured && <span className="ribbon">Most popular</span>}
+              <h3>{p.name}</h3>
+              <div className="price">
+                <b>{formatPrice(p.price_cents)}</b>
+                <small>/ month</small>
+              </div>
+              <p className="muted" style={{ margin: '2px 0 0' }}>
+                {p.description ?? `${formatMinutes(p.monthly_minutes)} of service time`}
+              </p>
+              <ul className="features">
+                <li>
+                  <strong style={{ color: 'var(--text)' }}>
+                    {formatMinutes(p.monthly_minutes)}
+                  </strong>{' '}
+                  of service time every month
+                </li>
+                {features.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              <div className="plan-cta">
+                <PlanCheckoutButton
+                  priceId={p.stripe_price_id}
+                  planName={p.name}
+                  isAuthed={!!user}
+                  variant={featured ? 'primary' : 'default'}
+                />
+              </div>
             </div>
-            <p className="muted">
-              {formatMinutes(p.monthly_minutes)} of service minutes every month
-            </p>
-            {p.description && <p className="muted">{p.description}</p>}
-            <div style={{ marginTop: 16 }}>
-              <PlanCheckoutButton
-                priceId={p.stripe_price_id}
-                planName={p.name}
-                isAuthed={!!user}
-              />
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {(!plans || plans.length === 0) && (
+      {list.length === 0 && (
         <p className="muted">Plans are being set up. Check back soon.</p>
       )}
 
-      <p className="form-note">
-        Questions first?{' '}
+      <p className="hero-note">
+        No contracts · cancel anytime ·{' '}
         <Link href="/services" style={{ color: 'var(--brand)' }}>
-          See what&apos;s included
+          see what&apos;s included
         </Link>
-        .
       </p>
     </section>
   )

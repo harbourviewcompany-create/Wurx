@@ -14,18 +14,28 @@ export function PlanCheckoutButton({
   priceId,
   planName,
   isAuthed,
+  variant = 'default',
 }: {
   priceId: string | null
   planName: string
   isAuthed: boolean
+  variant?: 'default' | 'primary'
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const btnClass =
+    variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-lg'
+
   if (!priceId) {
     return (
-      <button className="btn" disabled title="This plan is not purchasable yet">
+      <button
+        className="btn btn-lg"
+        disabled
+        title="This plan is not purchasable yet"
+        style={{ width: '100%' }}
+      >
         Coming soon
       </button>
     )
@@ -77,12 +87,12 @@ export function PlanCheckoutButton({
         </div>
       )}
       <button
-        className="btn btn-primary"
+        className={btnClass}
         onClick={subscribe}
         disabled={loading}
         style={{ width: '100%' }}
       >
-        {loading ? 'Redirecting…' : `Subscribe to ${planName}`}
+        {loading ? 'Redirecting…' : `Choose ${planName}`}
       </button>
     </>
   )
