@@ -1,10 +1,12 @@
 // Deployed to Supabase project rzdavbuoisckvdapbcbj (verify_jwt = true).
-// This file mirrors the live function; keep them in sync — redeploy with:
+//
+// The Stripe server key is stored in Supabase Vault (not in env or in this file)
+// and read at runtime via the service-role-only RPC public.get_app_secret, so no
+// secret lives in this public repo. Redeploy with:
 //   supabase functions deploy create-checkout
 import Stripe from 'npm:stripe@^17'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -15,12 +17,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function getStripeKey(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_app_secret', {
+    p_name: 'STRIPE_SECRET_KEY',
+  })
+  if (error) {
+    console.error('Failed to read Stripe key from Vault:', error.message)
+    return null
+  }
+  return (data as string) ?? null
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    const stripeKey = await getStripeKey()
+    if (!stripeKey) {
+      return new Response(
+        JSON.stringify({ error: 'Stripe key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const stripe = new Stripe(stripeKey)
+
     const { userId, priceId } = await req.json()
 
     if (!userId || !priceId) {
