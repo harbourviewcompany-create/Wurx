@@ -9,13 +9,19 @@ export async function SiteHeader() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  let isAdmin = false
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    isAdmin = profile?.role === 'admin'
+  }
+
   return (
     <header className="site-header">
       <div className="container inner">
         <Link href="/" className="brand">
           Wur<span>x</span>
         </Link>
-        <HeaderNav isLoggedIn={!!user} onSignOut={signOut} />
+        <HeaderNav isLoggedIn={!!user} isAdmin={isAdmin} onSignOut={signOut} />
       </div>
     </header>
   )

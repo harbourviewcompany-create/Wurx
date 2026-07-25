@@ -5,9 +5,11 @@ import Link from 'next/link'
 
 export function HeaderNav({
   isLoggedIn,
+  isAdmin,
   onSignOut,
 }: {
   isLoggedIn: boolean
+  isAdmin: boolean
   onSignOut: (formData: FormData) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -36,6 +38,11 @@ export function HeaderNav({
             <Link href="/dashboard" onClick={() => setOpen(false)}>
               Dashboard
             </Link>
+            {isAdmin && (
+              <Link href="/admin/bookings" onClick={() => setOpen(false)}>
+                Admin
+              </Link>
+            )}
             <form action={onSignOut}>
               <button className="btn btn-ghost" type="submit">
                 Sign out

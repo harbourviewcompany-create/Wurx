@@ -422,12 +422,32 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          created_at?: string
+          credit_multiplier?: number
+          default_duration_minutes?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
           name: string
+          provider_rate_cents_per_hour?: number | null
+          requires_licensed_provider?: boolean
           slug: string
+          sort_order?: number
         }
         Update: {
+          created_at?: string
+          credit_multiplier?: number
+          default_duration_minutes?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
           is_active?: boolean
           name?: string
+          provider_rate_cents_per_hour?: number | null
+          requires_licensed_provider?: boolean
+          slug?: string
+          sort_order?: number
         }
         Relationships: []
       }
