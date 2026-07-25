@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { BookingForm } from '@/components/BookingForm'
+import { ServiceBrowser } from '@/components/ServiceBrowser'
+import { formatMinutes } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,9 @@ export default async function BookPage() {
   const [servicesRes, subRes, balanceRes, profileRes] = await Promise.all([
     supabase
       .from('services')
-      .select('id, slug, name, icon, default_duration_minutes, credit_multiplier')
+      .select(
+        'id, slug, name, description, icon, default_duration_minutes, credit_multiplier, requires_licensed_provider',
+      )
       .eq('is_active', true)
       .order('sort_order'),
     supabase
@@ -40,25 +43,8 @@ export default async function BookPage() {
       .single(),
   ])
 
-  const hasActiveSub =
-    !!subRes.data && ACTIVE_SUB_STATUSES.includes(subRes.data.status)
-
-  if (!hasActiveSub) {
-    return (
-      <section className="container section">
-        <div className="card" style={{ maxWidth: 520, margin: '40px auto' }}>
-          <h2 style={{ marginTop: 0 }}>You need an active plan</h2>
-          <p className="muted">
-            Booking spends the minutes in your subscription. Choose a plan to get
-            started.
-          </p>
-          <Link href="/pricing" className="btn btn-primary">
-            See plans
-          </Link>
-        </div>
-      </section>
-    )
-  }
+  const canBook = !!subRes.data && ACTIVE_SUB_STATUSES.includes(subRes.data.status)
+  const available = balanceRes.data?.available_minutes ?? 0
 
   const services = (servicesRes.data ?? []).map((s) => ({
     ...s,
@@ -67,16 +53,34 @@ export default async function BookPage() {
 
   return (
     <section className="container section">
-      <div style={{ maxWidth: 620, margin: '0 auto' }}>
-        <h1>Book a service</h1>
-        <p className="muted">
-          You have{' '}
-          <strong>{balanceRes.data?.available_minutes ?? 0} minutes</strong>{' '}
-          available.
-        </p>
-        <BookingForm
+      <div className="browse-head">
+        <div>
+          <h1 style={{ margin: 0 }}>Book a service</h1>
+          <p className="muted" style={{ margin: '4px 0 0' }}>
+            {canBook ? (
+              <>
+                <strong style={{ color: 'var(--text)' }}>
+                  {formatMinutes(available)}
+                </strong>{' '}
+                of service time available
+              </>
+            ) : (
+              'Browse everything we do — start a plan when you’re ready.'
+            )}
+          </p>
+        </div>
+        {!canBook && (
+          <Link href="/pricing" className="btn btn-primary">
+            Choose a plan
+          </Link>
+        )}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <ServiceBrowser
           services={services}
-          availableMinutes={balanceRes.data?.available_minutes ?? 0}
+          availableMinutes={available}
+          canBook={canBook}
           defaults={{
             address_line1: profileRes.data?.address_line1 ?? '',
             city: profileRes.data?.city ?? '',

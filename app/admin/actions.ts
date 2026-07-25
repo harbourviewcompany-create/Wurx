@@ -54,11 +54,23 @@ export async function assignProvider(formData: FormData) {
   const bookingId = String(formData.get('bookingId'))
   const providerId = String(formData.get('providerId') || '')
 
-  const { error } = await supabase
-    .from('bookings')
-    .update({ provider_id: providerId || null })
-    .eq('id', bookingId)
-  if (error) throw new Error(error.message)
+  if (!providerId) {
+    // Unassign via RPC: a raw update had no status predicate, so it could
+    // reopen a completed/cancelled booking and left the accepted offer dangling.
+    const { error } = await supabase.rpc('admin_unassign_booking', {
+      p_booking_id: bookingId,
+    })
+    if (error) throw new Error(error.message)
+  } else {
+    // Go through the RPC so assignment also sets status = 'confirmed', records
+    // the job_offer, and refuses providers who aren't verified / in-area /
+    // available. A plain update did none of that.
+    const { error } = await supabase.rpc('admin_assign_booking', {
+      p_booking_id: bookingId,
+      p_provider_id: providerId,
+    })
+    if (error) throw new Error(error.message)
+  }
 
   revalidatePath('/admin/bookings')
 }
