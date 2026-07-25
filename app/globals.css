@@ -1116,3 +1116,21 @@ footer.site-footer {
 .link-quiet:hover {
   color: var(--text);
 }
+
+/* Notifications */
+.notif-row {
+  align-items: flex-start;
+  gap: 14px;
+}
+.notif-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.card-heading .tag {
+  margin-left: 8px;
+}

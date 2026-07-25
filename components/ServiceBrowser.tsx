@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Clock, Minus, Plus, Search, ShieldCheck, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMinutes } from '@/lib/format'
+import { affordability, serviceCostMinutes } from '@/lib/booking'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
 export type BrowsableService = {
@@ -29,7 +30,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 
 /** Cost in plan minutes for a given service + duration. */
 function costOf(service: BrowsableService, minutes: number) {
-  return Math.ceil(minutes * service.credit_multiplier)
+  return serviceCostMinutes(minutes, service.credit_multiplier)
 }
 
 /** Next occurrence of a given hour, `days` from now, as a datetime-local value. */
@@ -115,8 +116,7 @@ export function ServiceBrowser({
   }
 
   const cost = selected ? costOf(selected, duration) : 0
-  const affordable = cost <= availableMinutes
-  const shortfall = cost - availableMinutes
+  const { affordable, shortfall, remaining } = affordability(cost, availableMinutes)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -276,7 +276,7 @@ export function ServiceBrowser({
             </div>
             <div className="muted cost-after">
               {affordable
-                ? `${formatMinutes(availableMinutes - cost)} left after`
+                ? `${formatMinutes(remaining)} left after`
                 : `${formatMinutes(shortfall)} short`}
             </div>
           </div>

@@ -5,6 +5,8 @@ import { formatDateTime, formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
+import { PayoutsCard } from '@/components/PayoutsCard'
+import { NotificationsPanel } from '@/components/NotificationsPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,13 +28,15 @@ export default async function ProviderDashboard() {
 
   const { data: provider } = await supabase
     .from('providers')
-    .select('id, business_name, verification, is_active, service_slugs, base_postal_code')
+    .select(
+      'id, business_name, verification, is_active, service_slugs, base_postal_code, stripe_account_id, payouts_enabled',
+    )
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!provider) redirect('/become-a-pro')
 
-  const [openRes, myBookingsRes] = await Promise.all([
+  const [openRes, myBookingsRes, earningsRes, notifRes] = await Promise.all([
     supabase
       .from('bookings')
       .select('id, scheduled_start, duration_minutes, city, postal_code, services(name, icon)')
@@ -46,7 +50,25 @@ export default async function ProviderDashboard() {
       .eq('provider_id', provider.id)
       .order('scheduled_start', { ascending: false })
       .limit(20),
+    supabase
+      .from('provider_earnings')
+      .select('net_cents, paid_out_at')
+      .eq('provider_id', provider.id),
+    supabase
+      .from('notifications')
+      .select('id, kind, title, body, read_at, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ])
+
+  const earnings = earningsRes.data ?? []
+  const pendingCents = earnings
+    .filter((e) => !e.paid_out_at)
+    .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
+  const paidCents = earnings
+    .filter((e) => e.paid_out_at)
+    .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
 
   const openJobs = openRes.data ?? []
   const myBookings = myBookingsRes.data ?? []
@@ -70,6 +92,17 @@ export default async function ProviderDashboard() {
           support if this is unexpected.
         </p>
       )}
+
+      <div style={{ marginTop: 18 }}>
+        <PayoutsCard
+          payoutsEnabled={!!provider.payouts_enabled}
+          hasAccount={!!provider.stripe_account_id}
+          pendingCents={pendingCents}
+          paidCents={paidCents}
+        />
+      </div>
+
+      <NotificationsPanel initial={notifRes.data ?? []} />
 
       <div className="section">
         <h2>Open jobs near you</h2>

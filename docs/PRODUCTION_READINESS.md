@@ -82,3 +82,57 @@ book a service (holds minutes) → complete (consumes) / cancel (releases).
   for ops until provider dispatch exists).
 - Review submission UI (the `reviews` table + insert policy already exist).
 - Customer profile editing and subscription management (cancel/change plan) UI.
+
+---
+
+## Platform hardening (this pass)
+
+Closed most of the remaining gaps. Everything below is **applied to the live
+project and verified**, not just committed.
+
+### Fixed — critical
+- **`complete_booking` could never run.** It locked with `FOR UPDATE` across a
+  `LEFT JOIN`, which Postgres rejects outright, so every call raised: no booking
+  could be completed, no minutes consumed, no provider earnings recorded. Found
+  by actually executing the flow end-to-end. Now locks only the bookings row.
+- **Minutes leaked into abandoned bookings.** A booking nobody claimed stayed
+  `requested` forever, holding the customer's minutes hostage. `pg_cron` now
+  cancels stale bookings and releases the holds every 15 minutes.
+
+### Added
+- **Notifications spine** — `notifications` table written by DB triggers on
+  every booking transition, for both customer and provider. In-app feed on both
+  dashboards; `send-notifications` edge function drains the queue via Resend
+  and **no-ops cleanly when no API key is set**, so email can be enabled later
+  by adding the key alone.
+- **Customers can cancel/change plan** — `billing-portal` edge function +
+  "Manage subscription" on the dashboard. Previously there was no in-app path.
+- **Providers can be paid** — `provider-payouts` edge function creates a Stripe
+  Connect Express account and onboarding link; provider dashboard shows pending
+  vs paid earnings. `provider_earnings` had been accruing with nowhere to send
+  money.
+- **Configurable platform fee** — `app_settings.platform_fee_bps` (was a
+  hardcoded 20% in SQL). Admin-only via RLS.
+- **Job offers expire** — `pg_cron` every 5 minutes.
+- **Tests** — `vitest` covering booking economics (multipliers, ceil rounding,
+  affordability edges, fee split invariants). The earnings test asserts the exact
+  values the live database produced, so the TypeScript and SQL cannot drift.
+  Wired into CI.
+
+### Fixed — security
+- Revoked `anon`/`authenticated` EXECUTE on trigger functions, `is_admin()` and
+  `get_setting_int()` — Supabase default-grants had exposed them as REST RPCs.
+
+## ⛳ Still outstanding (needs you)
+
+1. **Turn on email** — add `RESEND_API_KEY` (+ optional `NOTIFY_FROM_EMAIL`) to
+   Vault and schedule `send-notifications`. Until then, in-app notifications
+   work and the email queue self-drains.
+2. **Supabase Auth** — Site URL, redirect URLs, and SMTP. Without SMTP,
+   confirmation emails don't send and **new users cannot complete signup**.
+3. **Enable leaked-password protection** (Auth → Passwords).
+4. **Live subscribe test** — proves the restricted Stripe key's scopes end to
+   end. Connect onboarding also requires Connect enabled on the Stripe account.
+5. **Rotate the `rk_live_` key** that was pasted in chat.
+6. **Fix the `main` branch-protection rule** — it requires two status-check
+   contexts nothing produces, which blocks every PR.

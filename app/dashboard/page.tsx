@@ -6,6 +6,8 @@ import { formatDateTime, formatMinutes } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ReviewForm } from '@/components/ReviewForm'
+import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
+import { NotificationsPanel } from '@/components/NotificationsPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +37,7 @@ export default async function Dashboard() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard')
 
-  const [profileRes, subRes, balanceRes, bookingsRes] = await Promise.all([
+  const [profileRes, subRes, balanceRes, bookingsRes, notifRes] = await Promise.all([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
     supabase
       .from('subscriptions')
@@ -57,6 +59,12 @@ export default async function Dashboard() {
       .eq('user_id', user.id)
       .order('scheduled_start', { ascending: false })
       .limit(20),
+    supabase
+      .from('notifications')
+      .select('id, kind, title, body, read_at, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ])
 
   const profile = profileRes.data
@@ -65,6 +73,7 @@ export default async function Dashboard() {
   const available = balanceRes.data?.available_minutes ?? 0
   const held = balanceRes.data?.held_minutes ?? 0
   const bookings = bookingsRes.data ?? []
+  const notifications = notifRes.data ?? []
   const hasActiveSub = !!sub && ACTIVE_SUB_STATUSES.includes(sub.status)
   const firstName = profile?.full_name?.split(' ')[0]
 
@@ -236,6 +245,9 @@ export default async function Dashboard() {
               {formatDateTime(sub.current_period_end)}
             </p>
           )}
+          <div style={{ marginTop: 12 }}>
+            <ManageSubscriptionButton />
+          </div>
         </div>
 
         <div className="card">
@@ -248,6 +260,8 @@ export default async function Dashboard() {
           </p>
         </div>
       </div>
+
+      <NotificationsPanel initial={notifications} />
 
       <div className="section">
         <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>

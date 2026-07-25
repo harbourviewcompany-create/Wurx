@@ -564,6 +564,49 @@ export type Database = {
           { foreignKeyName: "subscriptions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          kind: string
+          title: string
+          body: string | null
+          booking_id: string | null
+          read_at: string | null
+          email_pending: boolean
+          emailed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          kind: string
+          title: string
+          body?: string | null
+          booking_id?: string | null
+        }
+        Update: {
+          read_at?: string | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          key: string
+          value: Json
+          description: string | null
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          value: Json
+          description?: string | null
+        }
+        Update: {
+          value?: Json
+          description?: string | null
+        }
+        Relationships: []
+      }
       wurx_ottawa_leads: {
         Row: {
           created_at: string | null
