@@ -5,16 +5,36 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Service = { slug: string; name: string }
+type Provider = {
+  id: string
+  business_name: string
+  bio: string | null
+  service_slugs: string[]
+  service_areas: string[]
+  base_postal_code: string | null
+  travel_radius_km: number
+}
 
-export function ProviderApplyForm({ services }: { services: Service[] }) {
+export function ProviderProfileForm({
+  provider,
+  services,
+}: {
+  provider: Provider
+  services: Service[]
+}) {
   const router = useRouter()
-  const [businessName, setBusinessName] = useState('')
-  const [bio, setBio] = useState('')
-  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([])
-  const [basePostalCode, setBasePostalCode] = useState('')
-  const [serviceAreas, setServiceAreas] = useState('')
-  const [travelRadiusKm, setTravelRadiusKm] = useState(15)
+  const [businessName, setBusinessName] = useState(provider.business_name)
+  const [bio, setBio] = useState(provider.bio ?? '')
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(provider.service_slugs)
+  const [basePostalCode, setBasePostalCode] = useState(provider.base_postal_code ?? '')
+  const [serviceAreas, setServiceAreas] = useState(
+    provider.service_areas
+      .filter((a) => a !== (provider.base_postal_code ?? '').toUpperCase().replace(/\s/g, '').slice(0, 3))
+      .join(', '),
+  )
+  const [travelRadiusKm, setTravelRadiusKm] = useState(provider.travel_radius_km)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function toggleService(slug: string) {
@@ -26,32 +46,15 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setSaved(false)
 
-    if (!businessName.trim()) {
-      setError('Business or your name is required.')
-      return
-    }
-    if (selectedSlugs.length === 0) {
-      setError('Pick at least one service you offer.')
-      return
-    }
-    if (!basePostalCode.trim()) {
-      setError('Your base postal code is required so we can match you to nearby jobs.')
+    if (!businessName.trim() || selectedSlugs.length === 0 || !basePostalCode.trim()) {
+      setError('Business name, at least one service, and a base postal code are required.')
       return
     }
 
     setLoading(true)
     const supabase = createClient()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      setError('You must be signed in.')
-      setLoading(false)
-      return
-    }
 
     const normalizedBase = basePostalCode.trim().toUpperCase().replace(/\s/g, '')
     const baseFsa = normalizedBase.slice(0, 3)
@@ -61,33 +64,31 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
       .filter(Boolean)
     const uniqueAreas = Array.from(new Set([baseFsa, ...areaList]))
 
-    const { error: insertError } = await supabase.from('providers').insert({
-      user_id: user.id,
-      business_name: businessName.trim(),
-      bio: bio.trim() || null,
-      service_slugs: selectedSlugs,
-      service_areas: uniqueAreas,
-      base_postal_code: basePostalCode.trim().toUpperCase(),
-      travel_radius_km: travelRadiusKm,
-    })
+    const { error: updateError } = await supabase
+      .from('providers')
+      .update({
+        business_name: businessName.trim(),
+        bio: bio.trim() || null,
+        service_slugs: selectedSlugs,
+        service_areas: uniqueAreas,
+        base_postal_code: basePostalCode.trim().toUpperCase(),
+        travel_radius_km: travelRadiusKm,
+      })
+      .eq('id', provider.id)
 
-    if (insertError) {
-      setError(insertError.message)
-      setLoading(false)
+    setLoading(false)
+    if (updateError) {
+      setError(updateError.message)
       return
     }
-
-    // Best-effort: mark the profile as a provider for nav/routing. Not fatal
-    // if it fails — the providers row is the source of truth.
-    await supabase.from('profiles').update({ role: 'provider' }).eq('id', user.id)
-
-    router.push('/provider/dashboard')
+    setSaved(true)
     router.refresh()
   }
 
   return (
-    <form className="card" onSubmit={onSubmit} style={{ marginTop: 18 }}>
+    <form className="card" onSubmit={onSubmit}>
       {error && <div className="form-error">{error}</div>}
+      {saved && <p className="form-note" style={{ color: 'var(--brand)' }}>Saved.</p>}
 
       <label htmlFor="businessName">Business or your name</label>
       <input
@@ -96,17 +97,10 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         required
         value={businessName}
         onChange={(e) => setBusinessName(e.target.value)}
-        placeholder="e.g. Campbell Home Services"
       />
 
-      <label htmlFor="bio">About you (optional)</label>
-      <textarea
-        id="bio"
-        rows={3}
-        value={bio}
-        onChange={(e) => setBio(e.target.value)}
-        placeholder="Experience, specialties, anything customers should know."
-      />
+      <label htmlFor="bio">About you</label>
+      <textarea id="bio" rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
 
       <label>Services you offer</label>
       <div className="grid grid-2" style={{ gap: 8, marginBottom: 4 }}>
@@ -143,7 +137,6 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
             required
             value={basePostalCode}
             onChange={(e) => setBasePostalCode(e.target.value)}
-            placeholder="K1P 1J1"
           />
         </div>
         <div>
@@ -159,7 +152,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         </div>
       </div>
 
-      <label htmlFor="serviceAreas">Other areas you serve (optional)</label>
+      <label htmlFor="serviceAreas">Other areas you serve</label>
       <input
         id="serviceAreas"
         type="text"
@@ -167,10 +160,6 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         onChange={(e) => setServiceAreas(e.target.value)}
         placeholder="K2P, K1S, K1N"
       />
-      <p className="form-note" style={{ marginTop: -4 }}>
-        Comma-separated postal FSAs (the first 3 characters, e.g. K1P). Jobs
-        are matched to your base code plus anything listed here.
-      </p>
 
       <button
         className="btn btn-primary"
@@ -178,7 +167,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         disabled={loading}
         style={{ width: '100%', marginTop: 16 }}
       >
-        {loading ? 'Submitting…' : 'Submit application'}
+        {loading ? 'Saving…' : 'Save profile'}
       </button>
     </form>
   )

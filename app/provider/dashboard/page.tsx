@@ -55,9 +55,14 @@ export default async function ProviderDashboard() {
     <section className="container section">
       <div className="list-row" style={{ paddingTop: 0 }}>
         <h1 style={{ margin: 0 }}>{provider.business_name}</h1>
-        <span className={provider.verification === 'verified' ? 'tag good' : 'tag warn'}>
-          {provider.verification === 'verified' ? 'Verified' : 'Verification pending'}
-        </span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span className={provider.verification === 'verified' ? 'tag good' : 'tag warn'}>
+            {provider.verification === 'verified' ? 'Verified' : 'Verification pending'}
+          </span>
+          <Link href="/provider/profile" className="btn btn-ghost">
+            Edit profile
+          </Link>
+        </div>
       </div>
       {!provider.is_active && (
         <p className="form-note" style={{ marginTop: 4 }}>

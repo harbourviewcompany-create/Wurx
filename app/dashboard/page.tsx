@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
 import { ServiceIcon } from '@/components/ServiceIcon'
+import { ReviewForm } from '@/components/ReviewForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,9 @@ export default async function Dashboard() {
       .maybeSingle(),
     supabase
       .from('bookings')
-      .select('id, status, scheduled_start, duration_minutes, services(name, icon)')
+      .select(
+        'id, status, scheduled_start, duration_minutes, services(name, icon), providers(id, business_name, rating)',
+      )
       .eq('user_id', user.id)
       .order('scheduled_start', { ascending: false })
       .limit(20),
@@ -54,6 +57,13 @@ export default async function Dashboard() {
   const held = balanceRes.data?.held_minutes ?? 0
   const bookings = bookingsRes.data ?? []
   const hasActiveSub = !!sub && ACTIVE_SUB_STATUSES.includes(sub.status)
+
+  const completedIds = bookings.filter((b) => b.status === 'completed').map((b) => b.id)
+  const { data: existingReviews } =
+    completedIds.length > 0
+      ? await supabase.from('reviews').select('booking_id').in('booking_id', completedIds)
+      : { data: [] as { booking_id: string }[] }
+  const reviewedBookingIds = new Set((existingReviews ?? []).map((r) => r.booking_id))
 
   return (
     <section className="container section">
@@ -133,9 +143,13 @@ export default async function Dashboard() {
           )}
           {bookings.map((b) => {
             const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            const provider = (b.providers ?? null) as
+              | { id: string; business_name: string; rating: number | null }
+              | null
             const cancellable = b.status === 'requested' || b.status === 'confirmed'
+            const needsReview = b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
             return (
-              <div key={b.id} className="list-row">
+              <div key={b.id} className="list-row" style={{ flexWrap: 'wrap' }}>
                 <div>
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
@@ -144,11 +158,20 @@ export default async function Dashboard() {
                   <div className="muted" style={{ fontSize: 14 }}>
                     {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
                   </div>
+                  {provider && (
+                    <div className="muted" style={{ fontSize: 14 }}>
+                      {provider.business_name}
+                      {provider.rating != null && ` · ★ ${provider.rating.toFixed(1)}`}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
                   {cancellable && <CancelBookingButton bookingId={b.id} />}
                 </div>
+                {needsReview && provider && (
+                  <ReviewForm bookingId={b.id} providerId={provider.id} />
+                )}
               </div>
             )
           })}
