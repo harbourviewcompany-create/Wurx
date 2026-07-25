@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes, formatPrice } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
@@ -44,8 +45,10 @@ export default async function Home() {
 
   return (
     <>
-      <section className="container hero">
-        <span className="eyebrow">● Now serving Ottawa</span>
+      <section className="container hero rise">
+        <span className="eyebrow">
+          <Sparkles size={14} /> Now serving Ottawa
+        </span>
         <h1>
           Your home, handled —{' '}
           <span className="gradient-text">on a subscription.</span>
@@ -63,7 +66,17 @@ export default async function Home() {
             See plans
           </Link>
         </div>
-        <p className="hero-note">No contracts · cancel anytime · insured pros</p>
+        <div className="trust-row" style={{ marginTop: 22 }}>
+          <span>
+            <ShieldCheck size={16} /> Vetted &amp; insured pros
+          </span>
+          <span>
+            <Check size={16} /> No contracts
+          </span>
+          <span>
+            <Check size={16} /> Cancel anytime
+          </span>
+        </div>
       </section>
 
       <section className="container section">

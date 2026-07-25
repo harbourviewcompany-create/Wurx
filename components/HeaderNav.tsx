@@ -47,7 +47,7 @@ export function HeaderNav({
               {isProvider ? 'Pro dashboard' : 'Become a pro'}
             </Link>
             {isAdmin && (
-              <Link href="/admin" onClick={() => setOpen(false)}>
+              <Link href="/admin/bookings" onClick={() => setOpen(false)}>
                 Admin
               </Link>
             )}
