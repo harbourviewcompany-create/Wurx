@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes } from '@/lib/format'
+import { ServiceIcon } from '@/components/ServiceIcon'
 
 export const revalidate = 300
 
@@ -33,8 +34,8 @@ export default async function ServicesPage() {
           return (
             <div key={s.slug} className="card">
               <div className="list-row" style={{ paddingTop: 0 }}>
-                <h3 style={{ margin: 0 }}>
-                  {s.icon ? `${s.icon} ` : ''}
+                <h3 className="card-heading" style={{ margin: 0 }}>
+                  <ServiceIcon name={s.icon} />
                   {s.name}
                 </h3>
                 {s.requires_licensed_provider && (
