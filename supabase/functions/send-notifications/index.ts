@@ -7,10 +7,24 @@
 // keep working and email can be switched on later by adding the key alone.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-)
+// Supabase injects the elevated key under different names depending on when the
+// project was created (legacy JWT `service_role` vs. the newer `sb_secret_…`).
+// Reading only one of them silently produces an un-elevated client: RLS then
+// filters every row out, the queue reads as empty, and the dispatcher reports
+// success while delivering nothing.
+const KEY_ENV_NAMES = [
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_SECRET_KEY',
+  'SERVICE_ROLE_KEY',
+] as const
+
+function resolveKey(): { name: string; value: string } | null {
+  for (const name of KEY_ENV_NAMES) {
+    const value = Deno.env.get(name)
+    if (value && value.trim() !== '') return { name, value }
+  }
+  return null
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -19,25 +33,39 @@ function json(body: unknown, status = 200) {
   })
 }
 
-async function secret(name: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc('get_app_secret', { p_name: name })
-  if (error) return null
-  return (data as string) ?? null
-}
-
 const BATCH = 50
 
 Deno.serve(async (req: Request) => {
-  // Shared-secret auth: this endpoint runs without JWT verification so a
-  // scheduler can call it, so it must not be openly invokable.
-  const expected = await secret('NOTIFY_DISPATCH_SECRET')
-  if (expected) {
-    const provided = req.headers.get('X-Dispatch-Secret')
-    if (provided !== expected) return json({ error: 'Forbidden' }, 403)
+  const key = resolveKey()
+  if (!key) {
+    // Fail loudly: a silent no-op here is indistinguishable from an empty queue.
+    return json({ error: 'No elevated key in the function environment' }, 500)
   }
 
-  const apiKey = await secret('RESEND_API_KEY')
-  const from = (await secret('NOTIFY_FROM_EMAIL')) ?? 'Wurx <notifications@wurx.ca>'
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, key.value)
+
+  async function secret(name: string): Promise<{ value: string | null; readable: boolean }> {
+    const { data, error } = await supabase.rpc('get_app_secret', { p_name: name })
+    if (error) return { value: null, readable: false }
+    return { value: (data as string) ?? null, readable: true }
+  }
+
+  // Shared-secret auth: this endpoint runs without JWT verification so a
+  // scheduler can call it, so it must not be openly invokable. If Vault can't
+  // be read we cannot authenticate the caller — fail closed rather than
+  // skipping the check, which would leave the endpoint open to anyone.
+  const dispatchSecret = await secret('NOTIFY_DISPATCH_SECRET')
+  if (!dispatchSecret.readable) {
+    return json({ error: 'Cannot read the dispatch secret; refusing to run unauthenticated' }, 503)
+  }
+  if (dispatchSecret.value) {
+    if (req.headers.get('X-Dispatch-Secret') !== dispatchSecret.value) {
+      return json({ error: 'Forbidden' }, 403)
+    }
+  }
+
+  const apiKey = (await secret('RESEND_API_KEY')).value
+  const from = (await secret('NOTIFY_FROM_EMAIL')).value ?? 'Wurx <notifications@wurx.ca>'
 
   const { data: pending, error } = await supabase
     .from('notifications')
@@ -47,7 +75,7 @@ Deno.serve(async (req: Request) => {
     .limit(BATCH)
 
   if (error) return json({ error: error.message }, 500)
-  if (!pending?.length) return json({ sent: 0, skipped: 0 })
+  if (!pending?.length) return json({ sent: 0, skipped: 0, pending: 0 })
 
   // Without an email provider configured, drain the queue flag so it doesn't
   // grow unbounded — the in-app notification remains the source of truth.
@@ -56,7 +84,12 @@ Deno.serve(async (req: Request) => {
       .from('notifications')
       .update({ email_pending: false })
       .in('id', pending.map((n) => n.id))
-    return json({ sent: 0, skipped: pending.length, reason: 'RESEND_API_KEY not set' })
+    return json({
+      sent: 0,
+      skipped: pending.length,
+      pending: pending.length,
+      reason: 'RESEND_API_KEY not set',
+    })
   }
 
   const userIds = [...new Set(pending.map((n) => n.user_id))]
@@ -68,6 +101,7 @@ Deno.serve(async (req: Request) => {
 
   let sent = 0
   let skipped = 0
+  let lastError: string | null = null
 
   for (const n of pending) {
     const to = emailOf.get(n.user_id)
@@ -93,7 +127,10 @@ Deno.serve(async (req: Request) => {
       })
 
       if (!res.ok) {
-        console.error('Resend failed', n.id, res.status, await res.text())
+        // Surfaced in the response too: this runs unattended, and a provider
+        // rejection that only reaches the logs is a rejection nobody sees.
+        lastError = `Resend ${res.status}: ${(await res.text()).slice(0, 200)}`
+        console.error('Resend failed', n.id, lastError)
         continue // leave pending so the next run retries
       }
 
@@ -103,9 +140,10 @@ Deno.serve(async (req: Request) => {
         .eq('id', n.id)
       sent++
     } catch (err) {
-      console.error('Send error', n.id, err)
+      lastError = err instanceof Error ? err.message : String(err)
+      console.error('Send error', n.id, lastError)
     }
   }
 
-  return json({ sent, skipped })
+  return json({ sent, skipped, pending: pending.length, lastError })
 })

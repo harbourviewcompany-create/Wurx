@@ -170,16 +170,48 @@ so it can't be used to enumerate accounts.
 > RLS policy that filters it. The polling fallback above exists precisely
 > because that last hop is unproven.
 
+### Fixed — notification email failed silently
+
+`send-notifications` was scheduled, running every 2 minutes, and reporting
+`{"sent":0,"skipped":0}` — which read as "queue empty" but actually meant
+"Resend rejected every send." Nothing in the response distinguished the two.
+Found by putting a real notification in the queue and watching what came back.
+
+Two things were wrong, both now fixed:
+
+- **The failure was invisible.** A provider rejection only went to
+  `console.error` and the row was left pending for retry, so the response looked
+  healthy forever. The response now carries `pending` and `lastError`, which is
+  how the actual cause was identified.
+- **`NOTIFY_FROM_EMAIL` was a personal `@google.com` address** — a domain this
+  Resend account can never verify, so every send was a 403. Vault now holds
+  `Wurx <onboarding@resend.dev>`.
+
+Also hardened while in there: if Vault can't be read, the function now returns
+503 instead of **skipping its shared-secret check** — the old code treated an
+unreadable secret as "no secret configured" and served the request, which would
+have left a `verify_jwt = false` endpoint open. And the elevated key is resolved
+across the names Supabase uses (`SUPABASE_SERVICE_ROLE_KEY` /
+`SUPABASE_SECRET_KEY`) instead of assuming one, since the un-elevated failure
+mode is another silent empty queue.
+
+**Where it stands now:** the loop is proven all the way to Resend's API with a
+valid sender. Resend then rejects with *"You can only send testing emails to
+your own email address"* — the account has **no verified domain**, which is the
+one remaining step (below) and cannot be done from here.
+
 ## ⛳ Still outstanding (needs you)
 
-1. **Turn on email** — add `RESEND_API_KEY` (+ optional `NOTIFY_FROM_EMAIL`) to
-   Vault and schedule `send-notifications`. Until then, in-app notifications
-   work and the email queue self-drains.
+1. **Verify a sending domain in Resend** (add the DNS records for `wurx.ca`, or
+   a `mail.` subdomain), then set Vault `NOTIFY_FROM_EMAIL` to
+   `Wurx <notifications@your-verified-domain>`. Until then Resend will only
+   deliver to the Resend account owner's own address; in-app notifications are
+   unaffected and the queue retries on its own, so nothing is lost in the
+   meantime.
 2. **Supabase Auth** — Site URL, redirect URLs, and SMTP. Without SMTP,
-   confirmation emails don't send and **new users cannot complete signup**.
+   confirmation emails don't send, **new users cannot complete signup**, and the
+   password-reset link has no way to reach anyone.
 3. **Enable leaked-password protection** (Auth → Passwords).
 4. **Live subscribe test** — proves the restricted Stripe key's scopes end to
    end. Connect onboarding also requires Connect enabled on the Stripe account.
 5. **Rotate the `rk_live_` key** that was pasted in chat.
-6. **Fix the `main` branch-protection rule** — it requires two status-check
-   contexts nothing produces, which blocks every PR.
