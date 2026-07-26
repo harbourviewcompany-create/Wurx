@@ -258,6 +258,9 @@ export default async function Dashboard() {
           <p className="muted" style={{ margin: '2px 0' }}>
             {profile?.email ?? user.email}
           </p>
+          <Link href="/dashboard/profile" style={{ color: 'var(--brand)', fontSize: 14 }}>
+            Edit profile
+          </Link>
         </div>
       </div>
 
