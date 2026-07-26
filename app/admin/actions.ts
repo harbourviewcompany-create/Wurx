@@ -102,6 +102,19 @@ export async function setProviderStatus(formData: FormData) {
   revalidatePath('/admin/providers')
 }
 
+export async function releasePayout(formData: FormData) {
+  const supabase = await requireAdmin()
+  const providerId = String(formData.get('providerId'))
+
+  const { data, error } = await supabase.functions.invoke('provider-payouts', {
+    body: { action: 'admin_payout', providerId },
+  })
+  if (error) throw new Error(error.message)
+  if (data?.error) throw new Error(data.error)
+
+  revalidatePath('/admin/providers')
+}
+
 // ---------------------------------------------------------------------------
 // Services
 // ---------------------------------------------------------------------------

@@ -330,6 +330,7 @@ export type Database = {
           id: string
           net_cents: number
           paid_out_at: string | null
+          payout_id: string | null
           platform_fee_cents: number
           provider_id: string
           worked_minutes: number
@@ -341,6 +342,7 @@ export type Database = {
           id?: string
           net_cents: number
           paid_out_at?: string | null
+          payout_id?: string | null
           platform_fee_cents?: number
           provider_id: string
           worked_minutes: number
@@ -352,6 +354,7 @@ export type Database = {
           id?: string
           net_cents?: number
           paid_out_at?: string | null
+          payout_id?: string | null
           platform_fee_cents?: number
           provider_id?: string
           worked_minutes?: number
@@ -360,6 +363,37 @@ export type Database = {
           { foreignKeyName: "provider_earnings_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: true; referencedRelation: "bookings"; referencedColumns: ["id"] },
           { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
           { foreignKeyName: "provider_earnings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_earnings_payout_id_fkey"; columns: ["payout_id"]; isOneToOne: false; referencedRelation: "provider_payouts"; referencedColumns: ["id"] },
+        ]
+      }
+      provider_payouts: {
+        Row: {
+          id: string
+          provider_id: string
+          amount_cents: number
+          stripe_transfer_id: string
+          released_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          provider_id: string
+          amount_cents: number
+          stripe_transfer_id: string
+          released_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          provider_id?: string
+          amount_cents?: number
+          stripe_transfer_id?: string
+          released_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "provider_payouts_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "provider_payouts_released_by_fkey"; columns: ["released_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       providers: {
