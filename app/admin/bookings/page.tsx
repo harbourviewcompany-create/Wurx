@@ -36,6 +36,27 @@ export default async function AdminBookingsPage() {
     : { data: [] as { id: string; email: string | null; full_name: string | null }[] }
   const customerById = new Map((customerRows ?? []).map((c) => [c.id, c]))
 
+  // Only bookings that are still assignable get a filtered eligible-provider
+  // list — completed/cancelled ones don't need it, and computing it for all
+  // 100 rows would mean bookings x providers RPC calls for no reason.
+  const assignableBookings = bookings.filter((b) => b.status === 'requested' || b.status === 'confirmed')
+  const eligibleByBooking = new Map<string, Set<string>>()
+  await Promise.all(
+    assignableBookings.map(async (b) => {
+      const results = await Promise.all(
+        providers.map(async (p) => {
+          if (!p.id) return null
+          const { data } = await supabase.rpc('provider_can_serve_booking', {
+            p_provider_id: p.id,
+            p_booking_id: b.id,
+          })
+          return data ? p.id : null
+        }),
+      )
+      eligibleByBooking.set(b.id, new Set(results.filter((id): id is string => !!id)))
+    }),
+  )
+
   return (
     <div className="card" style={{ marginTop: 18 }}>
       {bookings.length === 0 && (
@@ -46,6 +67,7 @@ export default async function AdminBookingsPage() {
       {bookings.map((b) => {
         const service = (b.services ?? null) as { name: string; icon: string | null } | null
         const customer = customerById.get(b.user_id) ?? null
+        const isAssignable = b.status === 'requested' || b.status === 'confirmed'
         return (
           <div key={b.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ minWidth: 220 }}>
@@ -78,20 +100,24 @@ export default async function AdminBookingsPage() {
                 </button>
               </form>
 
-              <form action={assignProvider} style={{ display: 'flex', gap: 6 }}>
-                <input type="hidden" name="bookingId" value={b.id} />
-                <select name="providerId" defaultValue={b.provider_id ?? ''} style={{ width: 'auto' }}>
-                  <option value="">Unassigned</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id ?? ''}>
-                      {p.business_name}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn" type="submit">
-                  Assign
-                </button>
-              </form>
+              {isAssignable && (
+                <form action={assignProvider} style={{ display: 'flex', gap: 6 }}>
+                  <input type="hidden" name="bookingId" value={b.id} />
+                  <select name="providerId" defaultValue={b.provider_id ?? ''} style={{ width: 'auto' }}>
+                    <option value="">Unassigned</option>
+                    {providers
+                      .filter((p) => p.id && eligibleByBooking.get(b.id)?.has(p.id))
+                      .map((p) => (
+                        <option key={p.id} value={p.id ?? ''}>
+                          {p.business_name}
+                        </option>
+                      ))}
+                  </select>
+                  <button className="btn" type="submit">
+                    Assign
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )
