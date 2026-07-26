@@ -214,3 +214,21 @@ export async function grantMinutes(formData: FormData) {
 
   revalidatePath('/admin/users')
 }
+
+export async function grantPlan(formData: FormData) {
+  const supabase = await requireAdmin()
+  const userId = String(formData.get('userId'))
+  const planId = String(formData.get('planId') || '')
+
+  if (!planId) {
+    throw new Error('Choose a plan')
+  }
+
+  const { error } = await supabase.rpc('admin_grant_plan', {
+    p_user_id: userId,
+    p_plan_id: planId,
+  })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/admin/users')
+}
