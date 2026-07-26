@@ -182,8 +182,8 @@ export default async function Dashboard() {
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#5b93ff" />
-                <stop offset="100%" stopColor="#a98bff" />
+                <stop offset="0%" stopColor="#1c2b3a" />
+                <stop offset="100%" stopColor="#c1440e" />
               </linearGradient>
             </defs>
             <circle
@@ -191,7 +191,7 @@ export default async function Dashboard() {
               cy="60"
               r={R}
               fill="none"
-              stroke="rgba(255,255,255,0.08)"
+              stroke="rgba(28,43,58,0.1)"
               strokeWidth="12"
             />
             <circle
