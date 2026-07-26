@@ -51,6 +51,9 @@ export function HeaderNav({
                 Admin
               </Link>
             )}
+            <Link href="/dashboard/account" onClick={() => setOpen(false)}>
+              Account
+            </Link>
             <form action={onSignOut}>
               <button className="btn btn-ghost" type="submit">
                 Sign out

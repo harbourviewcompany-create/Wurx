@@ -53,7 +53,12 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <label htmlFor="password">Password</label>
+          <div className="label-row">
+            <label htmlFor="password">Password</label>
+            <Link href="/forgot-password" className="link-quiet">
+              Forgot password?
+            </Link>
+          </div>
           <input
             id="password"
             type="password"

@@ -123,6 +123,53 @@ project and verified**, not just committed.
 - Revoked `anon`/`authenticated` EXECUTE on trigger functions, `is_admin()` and
   `get_setting_int()` — Supabase default-grants had exposed them as REST RPCs.
 
+---
+
+## Account, recovery, and shell polish (this pass)
+
+### Fixed — a locked-out user had no way back in
+There was **no password reset flow at all**: a customer who forgot their
+password could not recover their account through the app. Added
+`/forgot-password` (sends the reset link) and `/reset-password` (sets the new
+one, via the existing `/auth/callback` code exchange). The login page now links
+to it, and signup can **resend the confirmation email** — the single most common
+reason a new signup stalls.
+
+The reset page deliberately reports success whether or not the address exists,
+so it can't be used to enumerate accounts.
+
+### Added
+- **`/dashboard/account`** — customers can finally edit their own name, phone,
+  and default service address (which pre-fills every booking), and change their
+  password in place. RLS scopes the write to their own row and the
+  `guard_profile_role_change` trigger still blocks any role escalation attempt.
+- **Error and empty states** — `error.tsx` (route-level, with the Vercel log
+  digest shown for support), `global-error.tsx` (root-layout failures, styled
+  without depending on the design system loading), and a real `not-found.tsx`.
+  Previously any thrown error rendered a blank screen.
+- **Streamed skeletons** for the dashboard and the service catalogue, both of
+  which are `force-dynamic` and do several round trips before first paint.
+- **Live activity** — `notifications` is published on Supabase Realtime
+  (migration `20260726120000`), so a claimed or completed booking appears
+  without a refresh. RLS filters the stream server-side, so a subscriber can
+  only receive rows where `user_id = auth.uid()`. If the socket can't be
+  established the panel falls back to a 60-second refresh rather than going
+  quietly stale.
+- **Share and install surface** — generated OG/Twitter card, app icon, Apple
+  touch icon, `robots.txt` (signed-in routes disallowed), `sitemap.xml`, and a
+  web manifest so the site installs to a phone home screen as a standalone app.
+- **Accessibility** — skip-to-content link, `aria-live` on the activity feed,
+  labelled inputs throughout the new forms.
+- **Tests** — 14 more cases covering postal-code/phone normalisation and the
+  password rules shared by the reset page and the account page (31 total).
+
+> **Not verified live:** the Realtime *socket* itself. This container's network
+> policy blocks direct connections to `*.supabase.co`, so an authenticated
+> browser subscription can't be exercised from here. What is verified is the
+> publication (`pg_publication_tables` now lists `public.notifications`) and the
+> RLS policy that filters it. The polling fallback above exists precisely
+> because that last hop is unproven.
+
 ## ⛳ Still outstanding (needs you)
 
 1. **Turn on email** — add `RESEND_API_KEY` (+ optional `NOTIFY_FROM_EMAIL`) to

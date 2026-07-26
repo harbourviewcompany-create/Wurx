@@ -102,7 +102,7 @@ export default async function ProviderDashboard() {
         />
       </div>
 
-      <NotificationsPanel initial={notifRes.data ?? []} />
+      <NotificationsPanel initial={notifRes.data ?? []} userId={user.id} />
 
       <div className="section">
         <h2>Open jobs near you</h2>

@@ -38,7 +38,11 @@ export default async function Dashboard() {
   if (!user) redirect('/login?redirect=/dashboard')
 
   const [profileRes, subRes, balanceRes, bookingsRes, notifRes] = await Promise.all([
-    supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
+    supabase
+      .from('profiles')
+      .select('full_name, email, phone, address_line1, city, postal_code')
+      .eq('id', user.id)
+      .single(),
     supabase
       .from('subscriptions')
       .select('status, current_period_end, cancel_at_period_end, plans(name, monthly_minutes)')
@@ -258,10 +262,22 @@ export default async function Dashboard() {
           <p className="muted" style={{ margin: '2px 0' }}>
             {profile?.email ?? user.email}
           </p>
+          <p className="muted" style={{ margin: '2px 0' }}>
+            {profile?.address_line1
+              ? [profile.address_line1, profile.city, profile.postal_code]
+                  .filter(Boolean)
+                  .join(', ')
+              : 'No default address saved yet'}
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/dashboard/account" className="btn">
+              Edit details
+            </Link>
+          </div>
         </div>
       </div>
 
-      <NotificationsPanel initial={notifications} />
+      <NotificationsPanel initial={notifications} userId={user.id} />
 
       <div className="section">
         <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
