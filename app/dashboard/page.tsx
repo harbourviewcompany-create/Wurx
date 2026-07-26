@@ -4,6 +4,7 @@ import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
+import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ReviewForm } from '@/components/ReviewForm'
 
@@ -231,6 +232,7 @@ export default async function Dashboard() {
               {formatDateTime(sub.current_period_end)}
             </p>
           )}
+          {sub && <ManageSubscriptionButton />}
         </div>
 
         <div className="card">
