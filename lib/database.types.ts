@@ -59,9 +59,9 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
-          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
-          { foreignKeyName: "bookings_service_id_fkey"; columns: ["service_id"]; isOneToOne: false; referencedRelation: "services"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: true; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: true; referencedRelation: "providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_service_id_fkey"; columns: ["service_id"]; isOneToOne: true; referencedRelation: "services"; referencedColumns: ["id"] },
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },

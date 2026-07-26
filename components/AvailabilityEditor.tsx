@@ -23,8 +23,8 @@ function minutesToTime(minutes: number) {
 }
 
 function timeToMinutes(time: string) {
-  const [h, m] = time.split(':').map(Number)
-  return h * 60 + m
+  const [hStr, mStr] = time.split(':')
+  return Number(hStr ?? 0) * 60 + Number(mStr ?? 0)
 }
 
 type Availability = { id: string; day_of_week: number; start_minute: number; end_minute: number }
@@ -42,11 +42,12 @@ export function AvailabilityEditor({
   const router = useRouter()
   const existingDays = new Set(initialAvailability.map((a) => a.day_of_week))
   const [selectedDays, setSelectedDays] = useState<Set<number>>(existingDays)
+  const firstAvailability = initialAvailability[0]
   const [startTime, setStartTime] = useState(
-    initialAvailability.length > 0 ? minutesToTime(initialAvailability[0].start_minute) : '09:00',
+    firstAvailability ? minutesToTime(firstAvailability.start_minute) : '09:00',
   )
   const [endTime, setEndTime] = useState(
-    initialAvailability.length > 0 ? minutesToTime(initialAvailability[0].end_minute) : '17:00',
+    firstAvailability ? minutesToTime(firstAvailability.end_minute) : '17:00',
   )
   const [savingHours, setSavingHours] = useState(false)
   const [hoursError, setHoursError] = useState<string | null>(null)

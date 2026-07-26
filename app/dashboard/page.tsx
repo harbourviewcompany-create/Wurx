@@ -280,10 +280,10 @@ export default async function Dashboard() {
             </p>
           )}
           {bookings.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
-            const provider = (b.providers ?? null) as
+            const service = (b.services as unknown as { name: string; icon: string | null } | null) ?? null
+            const provider = (b.providers as unknown as
               | { id: string; business_name: string; rating: number | null }
-              | null
+              | null) ?? null
             const cancellable = b.status === 'requested' || b.status === 'confirmed'
             const needsReview = b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
             return (

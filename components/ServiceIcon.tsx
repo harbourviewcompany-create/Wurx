@@ -28,7 +28,7 @@ export function ServiceIcon({
   size = 18,
   className,
 }: {
-  name?: string | null
+  name?: string | null | undefined
   size?: number
   className?: string
 }) {

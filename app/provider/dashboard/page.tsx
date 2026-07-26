@@ -116,7 +116,7 @@ export default async function ProviderDashboard() {
             </p>
           )}
           {openJobs.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            const service = (b.services as unknown as { name: string; icon: string | null } | null) ?? null
             return (
               <div key={b.id} className="list-row">
                 <div>
@@ -145,7 +145,7 @@ export default async function ProviderDashboard() {
             </p>
           )}
           {myBookings.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            const service = (b.services as unknown as { name: string; icon: string | null } | null) ?? null
             const completable = b.status === 'confirmed' || b.status === 'in_progress'
             return (
               <div key={b.id} className="list-row">

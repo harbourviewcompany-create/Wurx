@@ -65,7 +65,7 @@ export default async function AdminBookingsPage() {
         </p>
       )}
       {bookings.map((b) => {
-        const service = (b.services ?? null) as { name: string; icon: string | null } | null
+        const service = (b.services as unknown as { name: string; icon: string | null } | null) ?? null
         const customer = customerById.get(b.user_id) ?? null
         const isAssignable = b.status === 'requested' || b.status === 'confirmed'
         return (

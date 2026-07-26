@@ -1,11 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    ppr: true,
-    reactCompiler: true,
-    dynamicIO: true,
-  },
+  reactCompiler: true,
+  cacheComponents: true,
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
