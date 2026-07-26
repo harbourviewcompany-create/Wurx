@@ -6,8 +6,6 @@ import { formatMinutes } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
-const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
-
 export default async function BookPage() {
   const supabase = await createClient()
 
@@ -16,7 +14,7 @@ export default async function BookPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard/book')
 
-  const [servicesRes, subRes, balanceRes, profileRes] = await Promise.all([
+  const [servicesRes, balanceRes, profileRes] = await Promise.all([
     supabase
       .from('services')
       .select(
@@ -24,13 +22,6 @@ export default async function BookPage() {
       )
       .eq('is_active', true)
       .order('sort_order'),
-    supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
     supabase
       .from('available_balances')
       .select('available_minutes')
@@ -43,8 +34,12 @@ export default async function BookPage() {
       .single(),
   ])
 
-  const canBook = !!subRes.data && ACTIVE_SUB_STATUSES.includes(subRes.data.status)
   const available = balanceRes.data?.available_minutes ?? 0
+  // request_booking() only ever checks available minutes server-side, not
+  // subscription status — this matches that, so minutes from any source
+  // (an active plan, an admin grant, a refund) are actually spendable
+  // instead of being hidden behind a subscription row that may not exist.
+  const canBook = available > 0
 
   const services = (servicesRes.data ?? []).map((s) => ({
     ...s,
