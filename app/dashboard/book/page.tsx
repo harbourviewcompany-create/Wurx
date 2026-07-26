@@ -5,8 +5,6 @@ import { BookingForm } from '@/components/BookingForm'
 
 export const dynamic = 'force-dynamic'
 
-const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
-
 export default async function BookPage() {
   const supabase = await createClient()
 
@@ -15,19 +13,12 @@ export default async function BookPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard/book')
 
-  const [servicesRes, subRes, balanceRes, profileRes] = await Promise.all([
+  const [servicesRes, balanceRes, profileRes] = await Promise.all([
     supabase
       .from('services')
       .select('id, slug, name, icon, default_duration_minutes, credit_multiplier')
       .eq('is_active', true)
       .order('sort_order'),
-    supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
     supabase
       .from('available_balances')
       .select('available_minutes')
@@ -40,18 +31,17 @@ export default async function BookPage() {
       .single(),
   ])
 
-  const hasActiveSub =
-    !!subRes.data && ACTIVE_SUB_STATUSES.includes(subRes.data.status)
+  const availableMinutes = balanceRes.data?.available_minutes ?? 0
 
-  if (!hasActiveSub) {
+  // request_booking() only checks available minutes, not subscription
+  // status — this gate matches that, so minutes from any source (an
+  // active plan, an admin grant, a refund) are actually spendable.
+  if (availableMinutes <= 0) {
     return (
       <section className="container section">
         <div className="card" style={{ maxWidth: 520, margin: '40px auto' }}>
-          <h2 style={{ marginTop: 0 }}>You need an active plan</h2>
-          <p className="muted">
-            Booking spends the minutes in your subscription. Choose a plan to get
-            started.
-          </p>
+          <h2 style={{ marginTop: 0 }}>You don&apos;t have any minutes yet</h2>
+          <p className="muted">Choose a plan to get minutes you can spend on bookings.</p>
           <Link href="/pricing" className="btn btn-primary">
             See plans
           </Link>
@@ -70,13 +60,11 @@ export default async function BookPage() {
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
         <h1>Book a service</h1>
         <p className="muted">
-          You have{' '}
-          <strong>{balanceRes.data?.available_minutes ?? 0} minutes</strong>{' '}
-          available.
+          You have <strong>{availableMinutes} minutes</strong> available.
         </p>
         <BookingForm
           services={services}
-          availableMinutes={balanceRes.data?.available_minutes ?? 0}
+          availableMinutes={availableMinutes}
           defaults={{
             address_line1: profileRes.data?.address_line1 ?? '',
             city: profileRes.data?.city ?? '',

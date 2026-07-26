@@ -71,7 +71,7 @@ export default async function Dashboard() {
         <h1 style={{ margin: 0 }}>
           Welcome{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
         </h1>
-        {hasActiveSub && (
+        {available > 0 && (
           <Link href="/dashboard/book" className="btn btn-primary">
             Book a service
           </Link>
@@ -130,7 +130,7 @@ export default async function Dashboard() {
           {bookings.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
               No bookings yet.{' '}
-              {hasActiveSub ? (
+              {available > 0 ? (
                 <Link href="/dashboard/book" style={{ color: 'var(--brand)' }}>
                   Book your first service
                 </Link>
