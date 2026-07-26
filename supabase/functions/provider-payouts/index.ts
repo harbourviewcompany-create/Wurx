@@ -47,7 +47,98 @@ Deno.serve(async (req: Request) => {
     if (userErr || !userData.user) return json({ error: 'Not authenticated' }, 401)
     const userId = userData.user.id
 
-    // Only a registered provider can onboard for payouts.
+    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
+    const action = body?.action ?? 'onboard'
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://wurx.vercel.app'
+
+    // ---- admin_payout: release accrued unpaid earnings to a provider ---
+    // Caller must be an admin; target provider comes from the request body
+    // (not derived from the caller's own provider row, since the caller
+    // here is the admin, not the provider being paid). Handled before the
+    // "caller must be a registered provider" gate below, since an admin
+    // releasing payouts has no reason to be a provider themselves.
+    if (action === 'admin_payout') {
+      const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+      if (callerProfile?.role !== 'admin') return json({ error: 'Not authorized' }, 403)
+
+      const targetProviderId = body?.providerId
+      if (!targetProviderId) return json({ error: 'providerId is required' }, 400)
+
+      const { data: targetProvider } = await supabase
+        .from('providers')
+        .select('id, stripe_account_id, payouts_enabled')
+        .eq('id', targetProviderId)
+        .single()
+      if (!targetProvider) return json({ error: 'Provider not found' }, 404)
+      if (!targetProvider.stripe_account_id || !targetProvider.payouts_enabled) {
+        return json({ error: 'Provider has not completed payout onboarding' }, 400)
+      }
+
+      const { data: unpaidRows, error: unpaidErr } = await supabase
+        .from('provider_earnings')
+        .select('id, net_cents')
+        .eq('provider_id', targetProviderId)
+        .is('payout_id', null)
+      if (unpaidErr) return json({ error: unpaidErr.message }, 500)
+
+      const amountCents = (unpaidRows ?? []).reduce((sum, r) => sum + r.net_cents, 0)
+      if (amountCents <= 0) return json({ error: 'Nothing owed to this provider' }, 400)
+
+      const stripeKey = await getStripeKey()
+      if (!stripeKey) return json({ error: 'Payouts are not configured' }, 500)
+      const stripe = new Stripe(stripeKey)
+
+      // Money moves first. Only once Stripe confirms the transfer do we
+      // touch the database — marking earnings paid before the transfer
+      // actually succeeded would be the wrong failure mode to risk.
+      const transfer = await stripe.transfers.create({
+        amount: amountCents,
+        currency: 'cad',
+        destination: targetProvider.stripe_account_id,
+        metadata: { wurx_provider_id: targetProviderId },
+      })
+
+      const { data: payout, error: payoutErr } = await supabase
+        .from('provider_payouts')
+        .insert({
+          provider_id: targetProviderId,
+          amount_cents: amountCents,
+          stripe_transfer_id: transfer.id,
+          released_by: userId,
+        })
+        .select('id')
+        .single()
+
+      if (payoutErr || !payout) {
+        // The transfer already went through on Stripe's side at this point.
+        // Logging loudly rather than silently losing the reconciliation
+        // trail - this needs a human to match transfer.id back to the
+        // provider by hand if it happens.
+        console.error(
+          `Transfer ${transfer.id} succeeded for provider ${targetProviderId} but recording it failed:`,
+          payoutErr?.message,
+        )
+        return json(
+          { error: 'Transfer succeeded but recording it failed - contact support with transfer ' + transfer.id },
+          500,
+        )
+      }
+
+      await supabase
+        .from('provider_earnings')
+        .update({ payout_id: payout.id })
+        .eq('provider_id', targetProviderId)
+        .is('payout_id', null)
+
+      return json({ paid: true, amountCents, transferId: transfer.id })
+    }
+
+    // Every other action (onboard / status) is the provider managing their
+    // own payouts, so it's gated on the caller actually being one.
     const { data: provider } = await supabase
       .from('providers')
       .select('id, business_name, stripe_account_id, payouts_enabled, verification')
@@ -59,10 +150,6 @@ Deno.serve(async (req: Request) => {
     const stripeKey = await getStripeKey()
     if (!stripeKey) return json({ error: 'Payouts are not configured' }, 500)
     const stripe = new Stripe(stripeKey)
-
-    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
-    const action = body?.action ?? 'onboard'
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://wurx.vercel.app'
 
     let accountId: string | null = provider.stripe_account_id
 
