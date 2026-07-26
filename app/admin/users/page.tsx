@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes } from '@/lib/format'
-import { setUserRole, grantMinutes } from '@/app/admin/actions'
+import { setUserRole, grantMinutes, grantPlan } from '@/app/admin/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,17 +15,19 @@ const ROLE_TAG: Record<string, string> = {
 export default async function AdminUsersPage() {
   const supabase = await createClient()
 
-  const [profilesRes, balancesRes] = await Promise.all([
+  const [profilesRes, balancesRes, plansRes] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, email, full_name, role, created_at')
       .order('created_at', { ascending: false })
       .limit(200),
     supabase.from('available_balances').select('user_id, available_minutes'),
+    supabase.from('plans').select('id, name, monthly_minutes').order('sort_order'),
   ])
 
   const profiles = profilesRes.data ?? []
   const balanceByUser = new Map((balancesRes.data ?? []).map((b) => [b.user_id, b.available_minutes ?? 0]))
+  const plans = plansRes.data ?? []
 
   return (
     <div className="card" style={{ marginTop: 18 }}>
@@ -69,6 +71,23 @@ export default async function AdminUsersPage() {
               />
               <button className="btn" type="submit">
                 Adjust
+              </button>
+            </form>
+
+            <form action={grantPlan} style={{ display: 'flex', gap: 6 }}>
+              <input type="hidden" name="userId" value={p.id} />
+              <select name="planId" defaultValue="" style={{ width: 'auto' }} required>
+                <option value="" disabled>
+                  Grant plan…
+                </option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} ({formatMinutes(plan.monthly_minutes)})
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-primary" type="submit">
+                Grant
               </button>
             </form>
           </div>
