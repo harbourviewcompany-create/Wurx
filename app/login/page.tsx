@@ -62,6 +62,11 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <p style={{ margin: '6px 0 0', textAlign: 'right' }}>
+            <Link href="/forgot-password" style={{ color: 'var(--muted)', fontSize: 14 }}>
+              Forgot password?
+            </Link>
+          </p>
           <button
             className="btn btn-primary"
             type="submit"
