@@ -3,8 +3,9 @@ import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes, formatPrice } from '@/lib/format'
 import { PlanCheckoutButton } from '@/components/PlanCheckoutButton'
+import { AutoStartCheckout } from '@/components/AutoStartCheckout'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -32,9 +33,9 @@ const DEFAULT_FEATURES = [
 export default async function PricingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>
+  searchParams: Promise<{ plan?: string; priceId?: string }>
 }) {
-  const { plan: planQuery } = await searchParams
+  const { plan: planQuery, priceId: priceIdQuery } = await searchParams
   const supabase = await createClient()
 
   const [{ data: plans }, { data: userData }] = await Promise.all([
@@ -72,6 +73,8 @@ export default async function PricingPage({
           specialised one.
         </p>
       </div>
+
+      <AutoStartCheckout priceId={priceIdQuery ?? null} isAuthed={!!user} />
 
       <div className="plans">
         {list.map((p, i) => {
