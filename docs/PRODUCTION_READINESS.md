@@ -1,7 +1,7 @@
 # Wurx — Production readiness
 
 Status as of this branch. ✅ = done, ⛳ = remaining (needs dashboard/secret access
-that isn't available through the automated tooling), 🔭 = phase 2.
+that isn't available through the automated tooling), 🔭 = later.
 
 **Customer conversion path & implementation order:** see
 [`docs/FUNNEL_PLAYBOOK.md`](./FUNNEL_PLAYBOOK.md) — route map, F1–F5 tickets,
@@ -54,6 +54,27 @@ webhook. A live restricted key (`rk_live_…`) is stored there.
 > Read**. If a subscribe attempt returns a permissions error, widen the key's
 > scopes in the Stripe Dashboard (or store a full `sk_live_…` in Vault instead).
 
+## ✅ Phase 2 product surface (shipped)
+
+These were listed as “not built” earlier; they exist on `main` and this branch:
+
+- **Provider onboarding** — `/become-a-pro` + `ProviderApplyForm`. Applications now
+  land as `verification = pending`, `is_active = false` until an admin verifies.
+- **Provider dashboard** — open jobs (RLS-matched), claim, complete, payouts,
+  reviews, notifications.
+- **Provider profile + availability** — services, areas, weekly hours, blackouts.
+- **Matching** — `provider_can_serve_booking` (service + FSA + availability +
+  blackout + verification + insurance). Shared by claim path, open-jobs RLS, and
+  admin assignment.
+- **Admin console** — bookings (status + assign), providers (verify/reject with
+  insurance + background-check dates, activate, payout), services, plans, users.
+- **Review submission** — `ReviewForm` on completed customer bookings; rating
+  sync trigger on `providers.rating`.
+- **Customer profile + subscription management** — profile edit + Stripe billing
+  portal button.
+- **Job fan-out** — on booking insert, matching verified providers receive an
+  in-app `job_available` notification (email when Resend is configured).
+
 ## ⛳ Remaining to go live (owner action)
 
 ### 1. Live end-to-end test
@@ -73,6 +94,14 @@ Subscribe → `checkout.session.completed` records the subscription →
 `invoice.paid` grants minutes to `hour_ledger` → dashboard shows the balance →
 book a service (holds minutes) → complete (consumes) / cancel (releases).
 
+### 4. Apply new migrations on the live project
+```bash
+supabase db push
+# or apply:
+#   20260727120000_wurx_phase2_provider_ops.sql
+#   20260727120100_wurx_admin_provider_compliance.sql
+```
+
 ## Known advisor notes (accepted)
 
 - `authenticated_security_definer_function_executable` (0029) fires for the three
@@ -80,15 +109,20 @@ book a service (holds minutes) → complete (consumes) / cancel (releases).
   users and each re-checks `auth.uid()` and ownership internally. `anon` execute
   has been revoked.
 
-## 🔭 Phase 2
+## 🔭 Later (nice-to-have, not launch blockers)
 
 Much of Phase 2 UI exists on `main` (provider apply, claim/complete, admin,
-reviews, billing portal). Remaining ops/dispatch work is tracked in open PRs
-and in `FUNNEL_PLAYBOOK.md` §3 F5 / §4 merge order.
+reviews, billing portal, multi-offer accept/decline dispatch). Remaining
+ops/dispatch work is tracked in open PRs and in `FUNNEL_PLAYBOOK.md` §3 F5 /
+§4 merge order.
+
+- Document upload for insurance / background-check evidence (dates are recorded
+  today; files are not).
+- Provider map / radius-based geo match beyond FSA lists.
 
 ---
 
-## Platform hardening (this pass)
+## Platform hardening (prior pass)
 
 Closed most of the remaining gaps. Everything below is **applied to the live
 project and verified**, not just committed.
@@ -139,3 +173,4 @@ project and verified**, not just committed.
 5. **Rotate the `rk_live_` key** that was pasted in chat.
 6. **Fix the `main` branch-protection rule** — it requires two status-check
    contexts nothing produces, which blocks every PR.
+7. **Apply Phase 2 migrations** on the live Supabase project (see above).

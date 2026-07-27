@@ -97,11 +97,30 @@ export async function setProviderStatus(formData: FormData) {
   const verification = rawVerification as VerificationStatus
   const isActive = verification === 'rejected' ? false : formData.get('isActive') === 'on'
 
-  const { error } = await supabase.rpc('admin_set_provider_status', {
+  const insuranceRaw = String(formData.get('insuranceExpiresAt') || '').trim()
+  const backgroundRaw = String(formData.get('backgroundCheckAt') || '').trim()
+
+  const args: {
+    p_provider_id: string
+    p_verification: VerificationStatus
+    p_is_active: boolean
+    p_insurance_expires_at?: string
+    p_background_check_at?: string
+  } = {
     p_provider_id: providerId,
     p_verification: verification,
     p_is_active: isActive,
-  })
+  }
+
+  if (insuranceRaw) {
+    args.p_insurance_expires_at = insuranceRaw
+  }
+  if (backgroundRaw) {
+    // Date input is YYYY-MM-DD; store as timestamptz at noon UTC for stability.
+    args.p_background_check_at = `${backgroundRaw}T12:00:00.000Z`
+  }
+
+  const { error } = await supabase.rpc('admin_set_provider_status', args)
   if (error) throw new Error(error.message)
 
   revalidatePath('/admin/providers')
