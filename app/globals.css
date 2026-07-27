@@ -485,6 +485,46 @@ textarea:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(193, 68, 14, 0.18);
 }
+/* Checkboxes (service pickers, day-of-week toggles). Without this they fall
+   under the generic input rule above -- width:100% and text padding on a
+   checkbox produces an oversized, blank, native-rendered box with no visible
+   checked state. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(224, 213, 189, 0.6);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input[type='checkbox']:checked {
+  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-strong) 100%);
+  border-color: transparent;
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(193, 68, 14, 0.35);
+}
+
 .form-error {
   background: rgba(168, 59, 50, 0.12);
   border: 1px solid rgba(168, 59, 50, 0.4);

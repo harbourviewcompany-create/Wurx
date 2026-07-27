@@ -50,9 +50,10 @@ export default async function BecomeAProPage() {
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
         <h1>Become a Wurx pro</h1>
         <p className="muted">
-          Set up your provider profile, pick the services you offer, and start
-          claiming open jobs in your area. Your profile is submitted for
-          verification, but you can start claiming jobs right away.
+          Set up your provider profile and pick the services you offer. We
+          review every application — background and insurance on file — before
+          you can start claiming jobs, so open jobs won&apos;t show until
+          you&apos;re verified.
         </p>
         <ProviderApplyForm services={services ?? []} />
       </div>
