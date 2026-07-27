@@ -1,35 +1,31 @@
-export function formatMinutes(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h <= 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
-
+/** Format a cents amount as CAD, e.g. 17900 -> "$179". */
 export function formatPrice(cents: number): string {
-  const dollars = cents / 100;
-  if (dollars % 1 === 0) return `$${dollars.toFixed(0)}`;
-  return `$${dollars.toFixed(2)}`;
+  const dollars = cents / 100
+  const hasCents = dollars % 1 !== 0
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(dollars)
 }
 
-export function formatDateTime(date: string | Date): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("en-CA", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+/** Format a minute count as "Xh Ym" (or "Xh" / "Ym"). */
+export function formatMinutes(minutes: number): string {
+  const sign = minutes < 0 ? '-' : ''
+  const m = Math.abs(minutes)
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  if (h === 0) return `${sign}${rem}m`
+  if (rem === 0) return `${sign}${h}h`
+  return `${sign}${h}h ${rem}m`
 }
 
-export function formatDate(date: string | Date): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-CA", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+/** Format an ISO timestamp for display in America/Toronto. */
+export function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'America/Toronto',
+  }).format(new Date(iso))
 }
