@@ -59,16 +59,16 @@ export default async function Home() {
           only spend the minutes you use.
         </p>
         <div className="cta">
-          <Link href="/signup" className="btn btn-primary btn-lg">
-            Get started
+          <Link href="/pricing" className="btn btn-primary btn-lg">
+            Choose a plan
           </Link>
-          <Link href="/pricing" className="btn btn-lg">
-            See plans
+          <Link href="#how-it-works" className="btn btn-lg">
+            See how it works
           </Link>
         </div>
         <div className="trust-row" style={{ marginTop: 22 }}>
           <span>
-            <ShieldCheck size={16} /> Vetted &amp; insured pros
+            <ShieldCheck size={16} /> Vetted & insured pros
           </span>
           <span>
             <Check size={16} /> No contracts
@@ -106,7 +106,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="container section">
+      <section id="how-it-works" className="container section">
         <div className="section-head">
           <span className="eyebrow">How it works</span>
           <h2>Three steps to a handled home</h2>
@@ -124,7 +124,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="container section">
+      <section id="plans" className="container section">
         <div className="section-head">
           <span className="eyebrow">Pricing</span>
           <h2>Simple monthly plans</h2>
@@ -148,7 +148,7 @@ export default async function Home() {
                 </p>
                 <div className="plan-cta" style={{ marginTop: 'auto' }}>
                   <Link
-                    href="/pricing"
+                    href={`/pricing?plan=${p.slug}`}
                     className={`btn btn-lg${featured ? ' btn-primary' : ''}`}
                     style={{ width: '100%' }}
                   >
