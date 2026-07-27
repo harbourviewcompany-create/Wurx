@@ -61,6 +61,8 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
       .filter(Boolean)
     const uniqueAreas = Array.from(new Set([baseFsa, ...areaList]))
 
+    // is_active stays false (DB default) until an admin verifies.
+    // verification = pending puts the application in the admin review queue.
     const { error: insertError } = await supabase.from('providers').insert({
       user_id: user.id,
       business_name: businessName.trim(),
@@ -69,6 +71,8 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
       service_areas: uniqueAreas,
       base_postal_code: basePostalCode.trim().toUpperCase(),
       travel_radius_km: travelRadiusKm,
+      verification: 'pending',
+      is_active: false,
     })
 
     if (insertError) {
