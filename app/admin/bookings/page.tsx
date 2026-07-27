@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
-import { setBookingStatus, assignProvider } from '@/app/admin/actions'
+import { setBookingStatus, assignProvider, redispatchOffers } from '@/app/admin/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,17 +18,30 @@ const STATUSES = ['requested', 'confirmed', 'in_progress', 'completed', 'cancell
 export default async function AdminBookingsPage() {
   const supabase = await createClient()
 
-  const [bookingsRes, providersRes] = await Promise.all([
+  const [bookingsRes, providersRes, offersRes] = await Promise.all([
     supabase
       .from('bookings')
       .select('id, user_id, status, scheduled_start, duration_minutes, provider_id, services(name, icon)')
       .order('scheduled_start', { ascending: false })
       .limit(100),
     supabase.from('dispatchable_providers').select('id, business_name'),
+    supabase
+      .from('job_offers')
+      .select('booking_id, status')
+      .in('status', ['offered', 'accepted', 'declined', 'expired', 'withdrawn']),
   ])
 
   const bookings = bookingsRes.data ?? []
   const providers = providersRes.data ?? []
+
+  const offerStats = new Map<string, { offered: number; accepted: number; declined: number }>()
+  for (const o of offersRes.data ?? []) {
+    const cur = offerStats.get(o.booking_id) ?? { offered: 0, accepted: 0, declined: 0 }
+    if (o.status === 'offered') cur.offered += 1
+    else if (o.status === 'accepted') cur.accepted += 1
+    else if (o.status === 'declined') cur.declined += 1
+    offerStats.set(o.booking_id, cur)
+  }
 
   const customerIds = [...new Set(bookings.map((b) => b.user_id))]
   const { data: customerRows } = customerIds.length
@@ -36,9 +49,6 @@ export default async function AdminBookingsPage() {
     : { data: [] as { id: string; email: string | null; full_name: string | null }[] }
   const customerById = new Map((customerRows ?? []).map((c) => [c.id, c]))
 
-  // Only bookings that are still assignable get a filtered eligible-provider
-  // list — completed/cancelled ones don't need it, and computing it for all
-  // 100 rows would mean bookings x providers RPC calls for no reason.
   const assignableBookings = bookings.filter((b) => b.status === 'requested' || b.status === 'confirmed')
   const eligibleByBooking = new Map<string, Set<string>>()
   await Promise.all(
@@ -68,6 +78,7 @@ export default async function AdminBookingsPage() {
         const service = (b.services ?? null) as { name: string; icon: string | null } | null
         const customer = customerById.get(b.user_id) ?? null
         const isAssignable = b.status === 'requested' || b.status === 'confirmed'
+        const stats = offerStats.get(b.id)
         return (
           <div key={b.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ minWidth: 220 }}>
@@ -81,6 +92,11 @@ export default async function AdminBookingsPage() {
               <div className="muted" style={{ fontSize: 14 }}>
                 {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
               </div>
+              {stats && (
+                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                  Offers: {stats.offered} open · {stats.accepted} accepted · {stats.declined} declined
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -115,6 +131,15 @@ export default async function AdminBookingsPage() {
                   </select>
                   <button className="btn" type="submit">
                     Assign
+                  </button>
+                </form>
+              )}
+
+              {b.status === 'requested' && !b.provider_id && (
+                <form action={redispatchOffers}>
+                  <input type="hidden" name="bookingId" value={b.id} />
+                  <button className="btn btn-ghost" type="submit" title="Create offers for newly matching providers">
+                    Redispatch
                   </button>
                 </form>
               )}
