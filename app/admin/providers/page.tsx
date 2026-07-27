@@ -14,12 +14,17 @@ const VERIFICATION_TAG: Record<string, string> = {
 export default async function AdminProvidersPage() {
   const supabase = await createClient()
 
-  const [providersRes, unpaidRes] = await Promise.all([
+  const [providersRes, unpaidRes, reviewsRes] = await Promise.all([
     supabase
       .from('providers')
       .select('id, business_name, verification, is_active, service_slugs, base_postal_code, rating, stripe_account_id, payouts_enabled')
       .order('created_at', { ascending: false }),
     supabase.from('provider_earnings').select('provider_id, net_cents').is('payout_id', null),
+    supabase
+      .from('reviews')
+      .select('id, provider_id, rating, comment, created_at')
+      .order('created_at', { ascending: false })
+      .limit(300),
   ])
 
   const providers = providersRes.data ?? []
@@ -27,6 +32,14 @@ export default async function AdminProvidersPage() {
   const unpaidByProvider = new Map<string, number>()
   for (const row of unpaidRes.data ?? []) {
     unpaidByProvider.set(row.provider_id, (unpaidByProvider.get(row.provider_id) ?? 0) + row.net_cents)
+  }
+
+  const reviewsByProvider = new Map<string, { id: string; rating: number; comment: string | null; created_at: string }[]>()
+  for (const r of reviewsRes.data ?? []) {
+    if (!r.provider_id) continue
+    const list = reviewsByProvider.get(r.provider_id) ?? []
+    list.push(r)
+    reviewsByProvider.set(r.provider_id, list)
   }
 
   return (
@@ -39,6 +52,7 @@ export default async function AdminProvidersPage() {
       {providers.map((p) => {
         const owedCents = unpaidByProvider.get(p.id) ?? 0
         const canPay = owedCents > 0 && !!p.stripe_account_id && p.payouts_enabled
+        const reviews = reviewsByProvider.get(p.id) ?? []
         return (
           <div key={p.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
             <div>
@@ -53,6 +67,25 @@ export default async function AdminProvidersPage() {
                 {!p.stripe_account_id && ' · not onboarded for payouts'}
                 {p.stripe_account_id && !p.payouts_enabled && ' · payouts not yet enabled'}
               </div>
+              {reviews.length > 0 && (
+                <details style={{ marginTop: 6 }}>
+                  <summary className="muted" style={{ fontSize: 14, cursor: 'pointer' }}>
+                    {reviews.length} review{reviews.length === 1 ? '' : 's'}
+                  </summary>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {reviews.slice(0, 10).map((r) => (
+                      <div key={r.id} style={{ fontSize: 14 }}>
+                        <span style={{ color: 'var(--brand)' }}>{'★'.repeat(r.rating)}</span>
+                        <span className="muted">{'★'.repeat(5 - r.rating)}</span>
+                        {r.comment && <span> — {r.comment}</span>}
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {new Date(r.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

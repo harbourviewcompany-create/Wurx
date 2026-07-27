@@ -29,14 +29,14 @@ export default async function ProviderDashboard() {
   const { data: provider } = await supabase
     .from('providers')
     .select(
-      'id, business_name, verification, is_active, service_slugs, base_postal_code, stripe_account_id, payouts_enabled',
+      'id, business_name, verification, is_active, service_slugs, base_postal_code, stripe_account_id, payouts_enabled, rating',
     )
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!provider) redirect('/become-a-pro')
 
-  const [openRes, myBookingsRes, earningsRes, notifRes] = await Promise.all([
+  const [openRes, myBookingsRes, earningsRes, notifRes, reviewsRes] = await Promise.all([
     supabase
       .from('bookings')
       .select('id, scheduled_start, duration_minutes, city, postal_code, services(name, icon)')
@@ -60,6 +60,12 @@ export default async function ProviderDashboard() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20),
+    supabase
+      .from('reviews')
+      .select('id, rating, comment, created_at')
+      .eq('provider_id', provider.id)
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
   const earnings = earningsRes.data ?? []
@@ -72,6 +78,7 @@ export default async function ProviderDashboard() {
 
   const openJobs = openRes.data ?? []
   const myBookings = myBookingsRes.data ?? []
+  const reviews = reviewsRes.data ?? []
 
   return (
     <section className="container section">
@@ -81,6 +88,7 @@ export default async function ProviderDashboard() {
           <span className={provider.verification === 'verified' ? 'tag good' : 'tag warn'}>
             {provider.verification === 'verified' ? 'Verified' : 'Verification pending'}
           </span>
+          {provider.rating != null && <span className="tag">★ {provider.rating.toFixed(1)}</span>}
           <Link href="/provider/profile" className="btn btn-ghost">
             Edit profile
           </Link>
@@ -166,6 +174,30 @@ export default async function ProviderDashboard() {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      <div className="section">
+        <h2>Recent reviews</h2>
+        <div className="card">
+          {reviews.length === 0 && (
+            <p className="muted" style={{ margin: 0 }}>
+              No reviews yet. They&apos;ll show up here once customers rate a
+              completed job.
+            </p>
+          )}
+          {reviews.map((r) => (
+            <div key={r.id} className="list-row" style={{ display: 'block' }}>
+              <div>
+                <span style={{ color: 'var(--brand)' }}>{'★'.repeat(r.rating)}</span>
+                <span className="muted">{'★'.repeat(5 - r.rating)}</span>
+              </div>
+              {r.comment && <p style={{ margin: '4px 0 0' }}>{r.comment}</p>}
+              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                {formatDateTime(r.created_at)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
