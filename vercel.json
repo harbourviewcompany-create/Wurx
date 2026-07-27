@@ -1,5 +1,10 @@
 {
   "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://rzdavbuoisckvdapbcbj.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz",
