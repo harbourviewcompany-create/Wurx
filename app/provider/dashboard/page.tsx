@@ -5,6 +5,7 @@ import { formatDateTime, formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
+import { OfferRespondButtons } from '@/components/OfferRespondButtons'
 import { PayoutsCard } from '@/components/PayoutsCard'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
 
@@ -16,6 +17,10 @@ const STATUS_TAG: Record<string, string> = {
   in_progress: 'tag good',
   completed: 'tag good',
   cancelled: 'tag bad',
+}
+
+function minutesLeft(expiresAt: string): number {
+  return Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60000))
 }
 
 export default async function ProviderDashboard() {
@@ -36,7 +41,17 @@ export default async function ProviderDashboard() {
 
   if (!provider) redirect('/become-a-pro')
 
-  const [openRes, myBookingsRes, earningsRes, notifRes, reviewsRes] = await Promise.all([
+  const [offersRes, openRes, myBookingsRes, earningsRes, notifRes, reviewsRes] = await Promise.all([
+    supabase
+      .from('job_offers')
+      .select(
+        'id, expires_at, offered_at, booking_id, bookings(id, scheduled_start, duration_minutes, city, postal_code, status, provider_id, services(name, icon))',
+      )
+      .eq('provider_id', provider.id)
+      .eq('status', 'offered')
+      .gt('expires_at', new Date().toISOString())
+      .order('expires_at', { ascending: true })
+      .limit(30),
     supabase
       .from('bookings')
       .select('id, scheduled_start, duration_minutes, city, postal_code, services(name, icon)')
@@ -76,7 +91,31 @@ export default async function ProviderDashboard() {
     .filter((e) => e.paid_out_at)
     .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
 
-  const openJobs = openRes.data ?? []
+  type BookingSnippet = {
+    id: string
+    scheduled_start: string
+    duration_minutes: number
+    city: string | null
+    postal_code?: string | null
+    status?: string
+    provider_id?: string | null
+    services: { name: string; icon: string | null } | null
+  }
+
+  const offers = (offersRes.data ?? [])
+    .map((o) => {
+      const booking = (o.bookings ?? null) as BookingSnippet | null
+      return {
+        id: o.id,
+        expires_at: o.expires_at,
+        booking,
+      }
+    })
+    .filter((o) => o.booking && o.booking.status === 'requested' && !o.booking.provider_id)
+
+  const offeredBookingIds = new Set(offers.map((o) => o.booking!.id))
+  // Open pool excludes jobs already offered to this provider (those live in Offers).
+  const openJobs = (openRes.data ?? []).filter((b) => !offeredBookingIds.has(b.id))
   const myBookings = myBookingsRes.data ?? []
   const reviews = reviewsRes.data ?? []
 
@@ -96,13 +135,13 @@ export default async function ProviderDashboard() {
       </div>
       {provider.verification !== 'verified' ? (
         <p className="form-note" style={{ marginTop: 4 }}>
-          We&apos;re reviewing your application. Open jobs will appear here
-          once you&apos;re verified.
+          We're reviewing your application. Job offers will appear here
+          once you're verified.
         </p>
       ) : (
         !provider.is_active && (
           <p className="form-note" style={{ marginTop: 4 }}>
-            Your profile is inactive, so it won&apos;t appear for new jobs.
+            Your profile is inactive, so it won't appear for new jobs.
             Contact support if this is unexpected.
           </p>
         )
@@ -120,21 +159,25 @@ export default async function ProviderDashboard() {
       <NotificationsPanel initial={notifRes.data ?? []} />
 
       <div className="section">
-        <h2>Open jobs near you</h2>
+        <h2>Offers for you</h2>
         <p className="muted" style={{ marginTop: -8 }}>
-          Matched to the services on your profile. First to claim gets it.
+          Matched to your services, area, and availability. Accept before the
+          timer runs out — first accept wins.
         </p>
         <div className="card">
-          {openJobs.length === 0 && (
+          {offers.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              No open jobs matching your services right now. Check back soon.
+              No open offers right now. New bookings that match you will show
+              up here automatically.
             </p>
           )}
-          {openJobs.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
+          {offers.map((o) => {
+            const b = o.booking!
+            const service = b.services
+            const left = minutesLeft(o.expires_at)
             return (
-              <div key={b.id} className="list-row">
-                <div>
+              <div key={o.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
                     {service?.name ?? 'Service'}
@@ -143,20 +186,53 @@ export default async function ProviderDashboard() {
                     {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
                     {b.city ? ` · ${b.city}` : ''}
                   </div>
+                  <div className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 6 }}>
+                    {left <= 0 ? 'Expiring…' : `${left} min left`}
+                  </div>
                 </div>
-                <ClaimBookingButton bookingId={b.id} />
+                <OfferRespondButtons offerId={o.id} />
               </div>
             )
           })}
         </div>
       </div>
 
+      {openJobs.length > 0 && (
+        <div className="section">
+          <h2>Open jobs near you</h2>
+          <p className="muted" style={{ marginTop: -8 }}>
+            Jobs you can still claim without a formal offer. First to claim gets
+            it.
+          </p>
+          <div className="card">
+            {openJobs.map((b) => {
+              const service = (b.services ?? null) as { name: string; icon: string | null } | null
+              return (
+                <div key={b.id} className="list-row">
+                  <div>
+                    <strong className="card-heading">
+                      <ServiceIcon name={service?.icon} size={16} />
+                      {service?.name ?? 'Service'}
+                    </strong>
+                    <div className="muted" style={{ fontSize: 14 }}>
+                      {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
+                      {b.city ? ` · ${b.city}` : ''}
+                    </div>
+                  </div>
+                  <ClaimBookingButton bookingId={b.id} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="section">
         <h2>Your jobs</h2>
         <div className="card">
           {myBookings.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              No claimed jobs yet. Claim one from the list above.
+              No jobs yet. Accept an offer above when one comes in.
             </p>
           )}
           {myBookings.map((b) => {
@@ -189,7 +265,7 @@ export default async function ProviderDashboard() {
         <div className="card">
           {reviews.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              No reviews yet. They&apos;ll show up here once customers rate a
+              No reviews yet. They'll show up here once customers rate a
               completed job.
             </p>
           )}

@@ -783,18 +783,22 @@ export type Database = {
       }
       admin_cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
       admin_grant_plan: { Args: { p_user_id: string; p_plan_id: string }; Returns: string }
+      admin_redispatch_booking: { Args: { p_booking_id: string }; Returns: number }
       admin_unassign_booking: { Args: { p_booking_id: string }; Returns: undefined }
       admin_set_provider_status: {
         Args: {
           p_is_active: boolean
           p_provider_id: string
           p_verification: Database["public"]["Enums"]["verification_status"]
+          p_insurance_expires_at?: string
+          p_background_check_at?: string
         }
         Returns: undefined
       }
       cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
       claim_booking: { Args: { p_booking_id: string }; Returns: undefined }
       complete_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      dispatch_booking_offers: { Args: { p_booking_id: string }; Returns: number }
       get_app_secret: { Args: { p_name: string }; Returns: string }
       provider_can_serve_booking: {
         Args: { p_booking_id: string; p_provider_id: string }
@@ -811,6 +815,10 @@ export type Database = {
           p_service_id: string
         }
         Returns: string
+      }
+      respond_to_offer: {
+        Args: { p_offer_id: string; p_accept: boolean }
+        Returns: undefined
       }
     }
     Enums: {
