@@ -7,6 +7,9 @@ that isn't available through the automated tooling), 🔭 = phase 2.
 [`docs/FUNNEL_PLAYBOOK.md`](./FUNNEL_PLAYBOOK.md) — route map, F1–F5 tickets,
 merge order, and smoke checklist. Use that before opening funnel or Phase 2 PRs.
 
+> **Shell polish remainder (PR #13):** do not merge #13. Unique leftovers are
+> ticketed in [`docs/PR13_CHERRY_PICK.md`](./PR13_CHERRY_PICK.md) (R1–R6).
+
 ## ✅ Done
 
 - **App rebuilt on Supabase** — Prisma layer removed; Next.js talks to the real
