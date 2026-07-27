@@ -3,6 +3,10 @@
 Status as of this branch. ✅ = done, ⛳ = remaining (needs dashboard/secret access
 that isn't available through the automated tooling), 🔭 = phase 2.
 
+**Customer conversion path & implementation order:** see
+[`docs/FUNNEL_PLAYBOOK.md`](./FUNNEL_PLAYBOOK.md) — route map, F1–F5 tickets,
+merge order, and smoke checklist. Use that before opening funnel or Phase 2 PRs.
+
 ## ✅ Done
 
 - **App rebuilt on Supabase** — Prisma layer removed; Next.js talks to the real
@@ -73,15 +77,11 @@ book a service (holds minutes) → complete (consumes) / cancel (releases).
   users and each re-checks `auth.uid()` and ownership internally. `anon` execute
   has been revoked.
 
-## 🔭 Phase 2 (not built)
+## 🔭 Phase 2
 
-- Provider onboarding, verification, and job dispatch UI (the `job_offers`,
-  `provider_earnings`, `provider_availability` tables and the
-  `dispatchable_providers` view already exist to support it).
-- Admin console (booking assignment, provider verification, `complete_booking`
-  for ops until provider dispatch exists).
-- Review submission UI (the `reviews` table + insert policy already exist).
-- Customer profile editing and subscription management (cancel/change plan) UI.
+Much of Phase 2 UI exists on `main` (provider apply, claim/complete, admin,
+reviews, billing portal). Remaining ops/dispatch work is tracked in open PRs
+and in `FUNNEL_PLAYBOOK.md` §3 F5 / §4 merge order.
 
 ---
 
