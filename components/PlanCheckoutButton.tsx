@@ -3,21 +3,31 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import {
+  loginUrlForPlan,
+  signupUrlForPlan,
+  startCheckoutSession,
+} from '@/lib/checkout'
 
 /**
  * Starts a Stripe Checkout session for a subscription plan by invoking the
  * `create-checkout` Supabase Edge Function. The function looks the plan up
  * server-side by its Stripe price id, so we never trust a client-supplied
  * amount here — we only pass the price id.
+ *
+ * Unauthenticated users are sent to signup (preferred) with priceId preserved
+ * so they land on Stripe after creating an account without re-picking a plan.
  */
 export function PlanCheckoutButton({
   priceId,
   planName,
+  planSlug,
   isAuthed,
   variant = 'default',
 }: {
   priceId: string | null
   planName: string
+  planSlug?: string
   isAuthed: boolean
   variant?: 'default' | 'primary'
 }) {
@@ -41,11 +51,14 @@ export function PlanCheckoutButton({
     )
   }
 
+  // Capture after null guard so nested closures see `string`, not `string | null`.
+  const resolvedPriceId: string = priceId
+
   async function subscribe() {
     setError(null)
 
     if (!isAuthed) {
-      router.push(`/login?redirect=/pricing`)
+      router.push(signupUrlForPlan(resolvedPriceId, planSlug))
       return
     }
 
@@ -57,22 +70,12 @@ export function PlanCheckoutButton({
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push(`/login?redirect=/pricing`)
+        router.push(loginUrlForPlan(resolvedPriceId, planSlug))
         return
       }
 
-      const { data, error: fnError } = await supabase.functions.invoke<{
-        url?: string
-        error?: string
-      }>('create-checkout', {
-        body: { userId: user.id, priceId },
-      })
-
-      if (fnError) throw new Error(fnError.message)
-      if (data?.error) throw new Error(data.error)
-      if (!data?.url) throw new Error('No checkout URL returned.')
-
-      window.location.href = data.url
+      const url = await startCheckoutSession(supabase, user.id, resolvedPriceId)
+      window.location.href = url
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
       setLoading(false)
@@ -94,6 +97,11 @@ export function PlanCheckoutButton({
       >
         {loading ? 'Redirecting…' : `Choose ${planName}`}
       </button>
+      {!isAuthed && (
+        <p className="muted" style={{ margin: '10px 0 0', fontSize: 13, textAlign: 'center' }}>
+          Creates your account, then secure checkout — cancel anytime.
+        </p>
+      )}
     </>
   )
 }

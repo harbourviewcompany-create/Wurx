@@ -3,8 +3,9 @@ import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes, formatPrice } from '@/lib/format'
 import { PlanCheckoutButton } from '@/components/PlanCheckoutButton'
+import { AutoStartCheckout } from '@/components/AutoStartCheckout'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -29,7 +30,12 @@ const DEFAULT_FEATURES = [
   'Cancel anytime',
 ]
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string; priceId?: string }>
+}) {
+  const { plan: planQuery, priceId: priceIdQuery } = await searchParams
   const supabase = await createClient()
 
   const [{ data: plans }, { data: userData }] = await Promise.all([
@@ -43,11 +49,16 @@ export default async function PricingPage() {
 
   const user = userData.user
   const list = plans ?? []
-  // Highlight the middle plan (or the one slugged "home").
-  const featuredIndex =
-    list.findIndex((p) => p.slug === 'home') >= 0
-      ? list.findIndex((p) => p.slug === 'home')
-      : Math.floor(list.length / 2)
+  // Prefer deep-linked plan, else "home", else middle.
+  const featuredIndex = (() => {
+    if (planQuery) {
+      const i = list.findIndex((p) => p.slug === planQuery)
+      if (i >= 0) return i
+    }
+    const home = list.findIndex((p) => p.slug === 'home')
+    if (home >= 0) return home
+    return Math.floor(list.length / 2)
+  })()
 
   return (
     <section className="container section center">
@@ -63,6 +74,8 @@ export default async function PricingPage() {
         </p>
       </div>
 
+      <AutoStartCheckout priceId={priceIdQuery ?? null} isAuthed={!!user} />
+
       <div className="plans">
         {list.map((p, i) => {
           const featured = i === featuredIndex
@@ -70,6 +83,7 @@ export default async function PricingPage() {
           return (
             <div
               key={p.id}
+              id={`plan-${p.slug}`}
               className={`card plan${featured ? ' featured' : ''}`}
               style={{ textAlign: 'left' }}
             >
@@ -97,6 +111,7 @@ export default async function PricingPage() {
                 <PlanCheckoutButton
                   priceId={p.stripe_price_id}
                   planName={p.name}
+                  planSlug={p.slug}
                   isAuthed={!!user}
                   variant={featured ? 'primary' : 'default'}
                 />
@@ -112,7 +127,7 @@ export default async function PricingPage() {
 
       <div className="trust-row" style={{ marginTop: 30 }}>
         <span>
-          <ShieldCheck size={16} /> Vetted &amp; insured pros
+          <ShieldCheck size={16} /> Vetted & insured pros
         </span>
         <span>
           <Check size={16} /> No contracts, cancel anytime
@@ -125,7 +140,7 @@ export default async function PricingPage() {
       <p className="form-note">
         Not sure yet?{' '}
         <Link href="/services" style={{ color: 'var(--brand)' }}>
-          See everything that&apos;s included
+          See everything that's included
         </Link>
       </p>
     </section>
