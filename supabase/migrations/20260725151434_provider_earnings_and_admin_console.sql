@@ -1,12 +1,7 @@
--- complete_booking() never credited the provider anything despite
--- services.provider_rate_cents_per_hour being populated for every service and
--- provider_earnings sitting empty. Adds that crediting (20% platform fee is a
--- placeholder rate — a real business decision, not meant to be final).
---
--- Also adds admin read access (providers/bookings) and admin RPCs to verify
--- providers, manually assign a stuck open booking, or cancel one — there was
--- no admin console at all despite profiles.role = 'admin' existing in the schema.
-
+-- 1. complete_booking never credited the provider anything, despite
+-- services.provider_rate_cents_per_hour existing precisely for this and
+-- provider_earnings having zero rows. Platform fee is a placeholder 20% —
+-- an actual business decision, not something to leave silently undocumented.
 create or replace function public.complete_booking(p_booking_id uuid)
 returns void
 language plpgsql
@@ -85,6 +80,8 @@ begin
 end;
 $function$;
 
+-- 2. Admin visibility: profiles.role='admin' exists but nothing granted admins
+-- read access beyond their own rows.
 create policy providers_select_admin on public.providers
   for select to authenticated
   using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
@@ -93,6 +90,8 @@ create policy bookings_select_admin on public.bookings
   for select to authenticated
   using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
 
+-- 3. Admin actions: verify/activate providers, and a manual-assign / cancel
+-- fallback for bookings stuck unclaimed (no dispatch UI exists yet).
 create or replace function public.admin_set_provider_status(
   p_provider_id uuid,
   p_verification public.verification_status,

@@ -1,9 +1,3 @@
--- Providers had no way to sign up (no INSERT policy on public.providers) and no
--- way to see or take an open booking (no dispatch mechanism existed at all).
--- This adds self-serve provider signup and a claim_booking() RPC that assigns
--- an open booking to the provider who claims it, mirroring the SECURITY DEFINER
--- pattern used by request_booking / cancel_booking / complete_booking.
-
 create policy providers_insert_own on public.providers
   for insert to authenticated
   with check (auth.uid() = user_id);

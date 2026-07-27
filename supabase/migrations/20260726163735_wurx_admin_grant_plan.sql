@@ -1,9 +1,3 @@
--- Manual admin plan grants: lets an admin put a user on a plan without going
--- through Stripe Checkout (e.g. comping an account, testing, a goodwill grant).
--- Mirrors the shape stripe-webhook writes on checkout.session.completed /
--- invoice.paid, so a manually-granted subscription looks identical to a real
--- one everywhere else in the app (dashboard ring, admin users list, etc).
-
 create or replace function public.admin_grant_plan(p_user_id uuid, p_plan_id uuid)
 returns uuid
 language plpgsql
@@ -26,9 +20,6 @@ begin
     raise exception 'Plan not found';
   end if;
 
-  -- One subscription per user for manual grants: if they already have a
-  -- manually-granted (non-Stripe) subscription, update it in place instead of
-  -- creating a second active row.
   select id into v_subscription_id
   from public.subscriptions
   where user_id = p_user_id and stripe_subscription_id is null

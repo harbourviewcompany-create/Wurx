@@ -1,11 +1,7 @@
--- send-notifications existed and was deployed, but nothing ever invoked it —
--- notifications would queue in email_pending forever. Schedule it via pg_cron,
--- calling a SECURITY DEFINER wrapper (rather than embedding the dispatch
--- secret directly in cron.job's stored command text, which is otherwise
--- readable by anyone with access to the cron schema).
-
 create extension if not exists pg_net;
 
+-- Wrapper so the dispatch secret never appears in cron.job's stored command
+-- text (which anyone with read access to the cron schema could otherwise see).
 create or replace function public.dispatch_send_notifications()
 returns void
 language plpgsql

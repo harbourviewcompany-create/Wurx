@@ -1,14 +1,5 @@
 -- Wurx: booking lifecycle RPCs + security/performance hardening
---
--- Authenticated users cannot write to hour_ledger / hour_holds directly (RLS
--- only grants them SELECT on their own rows). These SECURITY DEFINER functions
--- are the controlled, atomic path for spending and releasing plan minutes.
--- Each one re-checks ownership against auth.uid(), so running as definer does
--- not let a caller touch anyone else's balance.
 
--- =====================================================================
--- request_booking: atomically create a booking and hold its minutes
--- =====================================================================
 create or replace function public.request_booking(
   p_service_id uuid,
   p_scheduled_start timestamptz,
@@ -53,8 +44,6 @@ begin
 
   v_required := ceil(p_duration_minutes * v_multiplier);
 
-  -- Serialise balance math per user so two concurrent bookings can't both
-  -- pass the affordability check against the same minutes.
   perform pg_advisory_xact_lock(hashtextextended(v_user::text, 0));
 
   select coalesce(sum(delta_minutes), 0) into v_settled
@@ -86,9 +75,6 @@ begin
 end;
 $$;
 
--- =====================================================================
--- cancel_booking: release the hold and mark the booking cancelled
--- =====================================================================
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void
 language plpgsql
@@ -125,10 +111,6 @@ begin
 end;
 $$;
 
--- =====================================================================
--- complete_booking: capture the hold, debit minutes via the ledger
--- Callable by an admin or the assigned provider's user.
--- =====================================================================
 create or replace function public.complete_booking(p_booking_id uuid)
 returns void
 language plpgsql
@@ -164,7 +146,7 @@ begin
   end if;
 
   if v_booking.status = 'completed' then
-    return; -- idempotent
+    return;
   end if;
 
   update public.bookings set status = 'completed', updated_at = now()
@@ -186,19 +168,13 @@ begin
 end;
 $$;
 
--- Supabase default-grants EXECUTE on new public functions to anon + authenticated.
--- Revoke anon/public so only signed-in users can call these RPCs (each function
--- still re-checks auth.uid() internally).
-revoke all on function public.request_booking(uuid, timestamptz, int, text, text, text, text) from anon, public;
-revoke all on function public.cancel_booking(uuid) from anon, public;
-revoke all on function public.complete_booking(uuid) from anon, public;
+revoke all on function public.request_booking(uuid, timestamptz, int, text, text, text, text) from public;
+revoke all on function public.cancel_booking(uuid) from public;
+revoke all on function public.complete_booking(uuid) from public;
 grant execute on function public.request_booking(uuid, timestamptz, int, text, text, text, text) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.complete_booking(uuid) to authenticated;
 
--- =====================================================================
--- Performance: covering indexes for previously unindexed foreign keys
--- =====================================================================
 create index if not exists bookings_service_id_idx on public.bookings (service_id);
 create index if not exists hour_ledger_booking_id_idx on public.hour_ledger (booking_id);
 create index if not exists hour_ledger_subscription_id_idx on public.hour_ledger (subscription_id);
@@ -206,12 +182,6 @@ create index if not exists provider_earnings_booking_id_idx on public.provider_e
 create index if not exists reviews_author_id_idx on public.reviews (author_id);
 create index if not exists subscriptions_plan_id_idx on public.subscriptions (plan_id);
 
--- =====================================================================
--- Security/perf: remove duplicate permissive SELECT on provider_availability.
--- The old ALL policy also granted SELECT to authenticated, overlapping with the
--- public read policy. Replace it with explicit write-only policies so there is
--- a single SELECT policy on the table.
--- =====================================================================
 drop policy if exists availability_write_own on public.provider_availability;
 
 create policy availability_insert_own on public.provider_availability
@@ -235,11 +205,6 @@ create policy availability_delete_own on public.provider_availability
     select id from public.providers where user_id = (select auth.uid())
   ));
 
--- =====================================================================
--- Security: tighten the anonymous lead-capture insert. Keeps public inserts
--- (it's a public contact form) but rejects empty/garbage rows instead of
--- allowing WITH CHECK (true).
--- =====================================================================
 drop policy if exists allow_anon_insert on public.wurx_ottawa_leads;
 
 create policy allow_anon_insert on public.wurx_ottawa_leads

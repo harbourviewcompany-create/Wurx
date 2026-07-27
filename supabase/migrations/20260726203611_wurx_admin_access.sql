@@ -3,21 +3,16 @@
 -- owner-scoped RLS policies (Postgres RLS policies are OR'd together,
 -- so this adds admin access without needing to know or touch whatever
 -- policies already exist on these tables).
-
-create or replace function public.is_admin()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(
-    (select role = 'admin' from public.profiles where id = auth.uid()),
-    false
-  );
-$$;
-
-grant execute on function public.is_admin() to authenticated;
+--
+-- NOTE: is_admin() and admin-select policies for bookings/providers already
+-- exist live (added later, under different names, by
+-- provider_earnings_and_admin_console / wurx_reconcile_and_harden_provider_trust).
+-- This migration only adds what's still actually missing: profiles, plans,
+-- services, hour_ledger, hour_holds admin policies, plus the cancel_booking
+-- admin-bypass fix. Written in 2026-07-25 but never applied live until now —
+-- discovered while reconciling the migrations folder against the live DB;
+-- without it, /admin/users, /admin/plans, /admin/services, and any
+-- hour_ledger admin insert (e.g. grantMinutes) were broken under RLS.
 
 -- bookings: admin can view/update/cancel any booking
 drop policy if exists admin_full_access_bookings on public.bookings;
@@ -68,7 +63,7 @@ create policy admin_insert_hour_ledger on public.hour_ledger
   with check (public.is_admin());
 
 -- hour_holds: admin can view active holds (available_balances aggregates
--- both hour_ledger and hour_holds — without this, the admin users page
+-- both hour_ledger and hour_holds -- without this, the admin users page
 -- would silently show wrong balances for anyone but the admin themself).
 drop policy if exists admin_read_hour_holds on public.hour_holds;
 create policy admin_read_hour_holds on public.hour_holds

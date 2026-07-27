@@ -1,13 +1,4 @@
--- claim_booking() and the open-jobs policy previously only checked service_slugs,
--- so a provider could see and claim jobs anywhere, any time, regardless of the
--- service_areas / provider_availability / provider_blackouts already on their
--- profile. This adds a shared provider_can_serve_booking() check (service +
--- Canadian FSA service area + weekly availability window + no blackout overlap)
--- used by both the RLS policy and claim_booking, so they can't diverge.
---
--- Also adds a trigger to keep providers.rating in sync with public.reviews,
--- since nothing wrote to that column before.
-
+-- Keep providers.rating in sync with reviews automatically.
 create or replace function public.refresh_provider_rating()
 returns trigger
 language plpgsql
@@ -39,6 +30,9 @@ create trigger reviews_refresh_provider_rating
   after insert or update or delete on public.reviews
   for each row execute function public.refresh_provider_rating();
 
+-- Real matching: service + service area (FSA) + weekly availability + no blackout,
+-- instead of just service_slugs. Applies to both the open-jobs list a provider can
+-- see and the claim_booking() function that assigns it, so they can't diverge.
 create or replace function public.provider_can_serve_booking(p_provider_id uuid, p_booking_id uuid)
 returns boolean
 language plpgsql
@@ -70,6 +64,7 @@ begin
     return false;
   end if;
 
+  -- Service area: match on Canadian FSA (first 3 chars of postal code, no space).
   if v_booking.postal_code is not null and array_length(v_provider.service_areas, 1) > 0 then
     v_fsa := upper(left(regexp_replace(v_booking.postal_code, '\s', '', 'g'), 3));
     if not (v_fsa = any(v_provider.service_areas)) then
@@ -77,6 +72,8 @@ begin
     end if;
   end if;
 
+  -- Weekly availability: provider must have a window covering the whole booking.
+  -- Timezone fixed to America/Toronto (Ottawa) to match the service area.
   v_dow := extract(dow from v_booking.scheduled_start at time zone 'America/Toronto');
   v_start_minute := extract(hour from v_booking.scheduled_start at time zone 'America/Toronto') * 60
     + extract(minute from v_booking.scheduled_start at time zone 'America/Toronto');
@@ -94,6 +91,7 @@ begin
     end if;
   end if;
 
+  -- Blackouts always block, even if no availability rows are set yet.
   if exists (
     select 1 from public.provider_blackouts
     where provider_id = p_provider_id
@@ -107,6 +105,7 @@ begin
 end;
 $function$;
 
+-- Replace the open-jobs visibility policy to use the shared matching function.
 drop policy if exists bookings_select_open_for_providers on public.bookings;
 create policy bookings_select_open_for_providers on public.bookings
   for select to authenticated
@@ -120,6 +119,7 @@ create policy bookings_select_open_for_providers on public.bookings
     )
   );
 
+-- Replace claim_booking to use the same matching rule instead of just service_slugs.
 create or replace function public.claim_booking(p_booking_id uuid)
 returns void
 language plpgsql
