@@ -51,11 +51,14 @@ export function PlanCheckoutButton({
     )
   }
 
+  // Capture after null guard so nested closures see `string`, not `string | null`.
+  const resolvedPriceId: string = priceId
+
   async function subscribe() {
     setError(null)
 
     if (!isAuthed) {
-      router.push(signupUrlForPlan(priceId, planSlug))
+      router.push(signupUrlForPlan(resolvedPriceId, planSlug))
       return
     }
 
@@ -67,11 +70,11 @@ export function PlanCheckoutButton({
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push(loginUrlForPlan(priceId, planSlug))
+        router.push(loginUrlForPlan(resolvedPriceId, planSlug))
         return
       }
 
-      const url = await startCheckoutSession(supabase, user.id, priceId)
+      const url = await startCheckoutSession(supabase, user.id, resolvedPriceId)
       window.location.href = url
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
