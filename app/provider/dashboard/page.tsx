@@ -94,11 +94,18 @@ export default async function ProviderDashboard() {
           </Link>
         </div>
       </div>
-      {!provider.is_active && (
+      {provider.verification !== 'verified' ? (
         <p className="form-note" style={{ marginTop: 4 }}>
-          Your profile is inactive, so it won&apos;t appear for new jobs. Contact
-          support if this is unexpected.
+          We&apos;re reviewing your application. Open jobs will appear here
+          once you&apos;re verified.
         </p>
+      ) : (
+        !provider.is_active && (
+          <p className="form-note" style={{ marginTop: 4 }}>
+            Your profile is inactive, so it won&apos;t appear for new jobs.
+            Contact support if this is unexpected.
+          </p>
+        )
       )}
 
       <div style={{ marginTop: 18 }}>
