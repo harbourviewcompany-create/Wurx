@@ -37,8 +37,6 @@ export async function setBookingStatus(formData: FormData) {
     const { error } = await supabase.rpc('complete_booking', { p_booking_id: bookingId })
     if (error) throw new Error(error.message)
   } else {
-    // requested / confirmed / in_progress don't touch minutes, so a plain
-    // update under the admin RLS policy is enough — no RPC needed.
     const { error } = await supabase
       .from('bookings')
       .update({ status: status as 'requested' | 'confirmed' | 'in_progress' })
@@ -55,22 +53,29 @@ export async function assignProvider(formData: FormData) {
   const providerId = String(formData.get('providerId') || '')
 
   if (!providerId) {
-    // Unassign via RPC: a raw update had no status predicate, so it could
-    // reopen a completed/cancelled booking and left the accepted offer dangling.
     const { error } = await supabase.rpc('admin_unassign_booking', {
       p_booking_id: bookingId,
     })
     if (error) throw new Error(error.message)
   } else {
-    // Go through the RPC so assignment also sets status = 'confirmed', records
-    // the job_offer, and refuses providers who aren't verified / in-area /
-    // available. A plain update did none of that.
     const { error } = await supabase.rpc('admin_assign_booking', {
       p_booking_id: bookingId,
       p_provider_id: providerId,
     })
     if (error) throw new Error(error.message)
   }
+
+  revalidatePath('/admin/bookings')
+}
+
+export async function redispatchOffers(formData: FormData) {
+  const supabase = await requireAdmin()
+  const bookingId = String(formData.get('bookingId'))
+
+  const { error } = await supabase.rpc('admin_redispatch_booking', {
+    p_booking_id: bookingId,
+  })
+  if (error) throw new Error(error.message)
 
   revalidatePath('/admin/bookings')
 }
