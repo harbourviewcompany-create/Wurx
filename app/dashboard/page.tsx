@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatDateTime, formatMinutes } from '@/lib/format'
+import { formatDateTime, formatMinutes, statusTagClass } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ReviewForm } from '@/components/ReviewForm'
@@ -12,14 +12,6 @@ import { NotificationsPanel } from '@/components/NotificationsPanel'
 export const dynamic = 'force-dynamic'
 
 const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
-
-const STATUS_TAG: Record<string, string> = {
-  requested: 'tag',
-  confirmed: 'tag good',
-  in_progress: 'tag good',
-  completed: 'tag good',
-  cancelled: 'tag bad',
-}
 
 function compact(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -304,7 +296,7 @@ export default async function Dashboard() {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+                  <span className={statusTagClass(b.status)}>{b.status}</span>
                   {cancellable && <CancelBookingButton bookingId={b.id} />}
                 </div>
                 {needsReview && provider && (

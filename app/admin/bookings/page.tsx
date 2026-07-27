@@ -1,17 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatDateTime, formatMinutes } from '@/lib/format'
+import { formatDateTime, formatMinutes, statusTagClass } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { setBookingStatus, assignProvider } from '@/app/admin/actions'
 
 export const dynamic = 'force-dynamic'
-
-const STATUS_TAG: Record<string, string> = {
-  requested: 'tag',
-  confirmed: 'tag good',
-  in_progress: 'tag good',
-  completed: 'tag good',
-  cancelled: 'tag bad',
-}
 
 const STATUSES = ['requested', 'confirmed', 'in_progress', 'completed', 'cancelled']
 
@@ -36,26 +28,22 @@ export default async function AdminBookingsPage() {
     : { data: [] as { id: string; email: string | null; full_name: string | null }[] }
   const customerById = new Map((customerRows ?? []).map((c) => [c.id, c]))
 
-  // Only bookings that are still assignable get a filtered eligible-provider
-  // list — completed/cancelled ones don't need it, and computing it for all
-  // 100 rows would mean bookings x providers RPC calls for no reason.
+  // Only bookings that are still assignable need an eligible-provider list —
+  // completed/cancelled ones don't. Eligibility for every (booking, provider)
+  // pair is computed in a SINGLE set-returning RPC round trip rather than one
+  // call per pair, which previously scaled as bookings x providers calls.
   const assignableBookings = bookings.filter((b) => b.status === 'requested' || b.status === 'confirmed')
   const eligibleByBooking = new Map<string, Set<string>>()
-  await Promise.all(
-    assignableBookings.map(async (b) => {
-      const results = await Promise.all(
-        providers.map(async (p) => {
-          if (!p.id) return null
-          const { data } = await supabase.rpc('provider_can_serve_booking', {
-            p_provider_id: p.id,
-            p_booking_id: b.id,
-          })
-          return data ? p.id : null
-        }),
-      )
-      eligibleByBooking.set(b.id, new Set(results.filter((id): id is string => !!id)))
-    }),
-  )
+  if (assignableBookings.length > 0) {
+    const { data: eligiblePairs } = await supabase.rpc('admin_eligible_providers_for_bookings', {
+      p_booking_ids: assignableBookings.map((b) => b.id),
+    })
+    for (const pair of eligiblePairs ?? []) {
+      const set = eligibleByBooking.get(pair.booking_id) ?? new Set<string>()
+      set.add(pair.provider_id)
+      eligibleByBooking.set(pair.booking_id, set)
+    }
+  }
 
   return (
     <div className="card" style={{ marginTop: 18 }}>
@@ -84,7 +72,7 @@ export default async function AdminBookingsPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+              <span className={statusTagClass(b.status)}>{b.status}</span>
 
               <form action={setBookingStatus} style={{ display: 'flex', gap: 6 }}>
                 <input type="hidden" name="bookingId" value={b.id} />

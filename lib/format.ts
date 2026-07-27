@@ -29,3 +29,17 @@ export function formatDateTime(iso: string): string {
     timeZone: 'America/Toronto',
   }).format(new Date(iso))
 }
+
+/** Maps a booking status to its tag CSS class. */
+const STATUS_TAG: Record<string, string> = {
+  requested: 'tag',
+  confirmed: 'tag good',
+  in_progress: 'tag good',
+  completed: 'tag good',
+  cancelled: 'tag bad',
+}
+
+/** CSS class for the status tag pill of a given booking status. */
+export function statusTagClass(status: string): string {
+  return STATUS_TAG[status] ?? 'tag'
+}

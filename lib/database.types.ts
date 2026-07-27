@@ -782,6 +782,10 @@ export type Database = {
         Returns: undefined
       }
       admin_cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      admin_eligible_providers_for_bookings: {
+        Args: { p_booking_ids: string[] }
+        Returns: { booking_id: string; provider_id: string }[]
+      }
       admin_grant_plan: { Args: { p_user_id: string; p_plan_id: string }; Returns: string }
       admin_unassign_booking: { Args: { p_booking_id: string }; Returns: undefined }
       admin_set_provider_status: {

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { formatDateTime, formatMinutes } from '@/lib/format'
+import { formatDateTime, formatMinutes, statusTagClass } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
@@ -9,14 +9,6 @@ import { PayoutsCard } from '@/components/PayoutsCard'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
 
 export const dynamic = 'force-dynamic'
-
-const STATUS_TAG: Record<string, string> = {
-  requested: 'tag',
-  confirmed: 'tag good',
-  in_progress: 'tag good',
-  completed: 'tag good',
-  cancelled: 'tag bad',
-}
 
 export default async function ProviderDashboard() {
   const supabase = await createClient()
@@ -175,7 +167,7 @@ export default async function ProviderDashboard() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+                    <span className={statusTagClass(b.status)}>{b.status}</span>
                   {completable && <CompleteBookingButton bookingId={b.id} />}
                 </div>
               </div>
