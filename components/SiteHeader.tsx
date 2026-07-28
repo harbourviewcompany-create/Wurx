@@ -23,7 +23,7 @@ export async function SiteHeader() {
   return (
     <header className="site-header">
       <div className="container inner">
-        <Link href={user ? '/dashboard' : '/'} className="brand">
+        <Link href={user ? '/dashboard/book' : '/'} className="brand">
           Wur<span>x</span>
         </Link>
         <HeaderNav isLoggedIn={!!user} isProvider={isProvider} isAdmin={isAdmin} onSignOut={signOut} />

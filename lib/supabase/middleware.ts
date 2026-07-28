@@ -43,10 +43,10 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Signed-in users should never land on the marketing home.
+  // Signed-in customers never land on marketing home — go straight to book.
   if (user && (pathname === '/' || pathname === '')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    url.pathname = '/dashboard/book'
     url.search = ''
     return NextResponse.redirect(url)
   }

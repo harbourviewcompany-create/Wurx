@@ -37,13 +37,9 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Belt-and-suspenders with proxy redirect: signed-in → book catalogue.
   if (user) {
-    const { data: provider } = await supabase
-      .from('providers')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    redirect(provider ? '/provider/dashboard' : '/dashboard')
+    redirect('/dashboard/book')
   }
 
   const [{ data: services }, { data: plans }] = await Promise.all([
