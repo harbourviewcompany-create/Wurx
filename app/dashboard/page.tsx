@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Check, ShieldCheck } from 'lucide-react'
+import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
@@ -8,10 +8,19 @@ import { ServiceIcon } from '@/components/ServiceIcon'
 import { ReviewForm } from '@/components/ReviewForm'
 import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
+import { MinutesArriving } from '@/components/MinutesArriving'
 
 export const dynamic = 'force-dynamic'
 
 const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
+
+const STATUS_LABEL: Record<string, string> = {
+  requested: 'Finding a pro…',
+  confirmed: 'Scheduled',
+  in_progress: 'In progress',
+  completed: 'Done',
+  cancelled: 'Cancelled',
+}
 
 const STATUS_TAG: Record<string, string> = {
   requested: 'tag',
@@ -21,6 +30,13 @@ const STATUS_TAG: Record<string, string> = {
   cancelled: 'tag bad',
 }
 
+/** Seasonal first-job suggestions (Ottawa). */
+const FIRST_JOB_HINTS: { slug: string; label: string; blurb: string }[] = [
+  { slug: 'cleaning', label: 'Home cleaning', blurb: 'Most popular first booking' },
+  { slug: 'snow-removal', label: 'Snow removal', blurb: 'Seasonal — book early' },
+  { slug: 'lawn-care', label: 'Lawn care', blurb: 'Great for spring & summer' },
+]
+
 function compact(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
@@ -29,7 +45,15 @@ function compact(minutes: number): string {
   return `${h}h`
 }
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ success?: string; booked?: string }>
+}) {
+  const params = await searchParams
+  const justPaid = params.success === 'true' || params.success === '1'
+  const justBooked = params.booked === '1' || params.booked === 'true'
+
   const supabase = await createClient()
 
   const {
@@ -37,7 +61,7 @@ export default async function Dashboard() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard')
 
-  const [profileRes, subRes, balanceRes, bookingsRes, notifRes] = await Promise.all([
+  const [profileRes, subRes, balanceRes, bookingsRes, notifRes, servicesRes] = await Promise.all([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
     supabase
       .from('subscriptions')
@@ -54,7 +78,7 @@ export default async function Dashboard() {
     supabase
       .from('bookings')
       .select(
-        'id, status, scheduled_start, duration_minutes, services(name, icon), providers(id, business_name, rating)',
+        'id, status, scheduled_start, duration_minutes, services(name, icon, slug), providers(id, business_name, rating)',
       )
       .eq('user_id', user.id)
       .order('scheduled_start', { ascending: false })
@@ -65,6 +89,10 @@ export default async function Dashboard() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20),
+    supabase
+      .from('services')
+      .select('slug, name, is_active')
+      .eq('is_active', true),
   ])
 
   const profile = profileRes.data
@@ -76,9 +104,13 @@ export default async function Dashboard() {
   const notifications = notifRes.data ?? []
   const hasActiveSub = !!sub && ACTIVE_SUB_STATUSES.includes(sub.status)
   const firstName = profile?.full_name?.split(' ')[0]
+  const activeSlugs = new Set((servicesRes.data ?? []).map((s) => s.slug))
 
-  // ---- Activation: no plan yet → one screen, one clear action ----
-  if (!hasActiveSub) {
+  // F3: paid, but grant not visible yet — never show the “choose a plan” wall.
+  const awaitingMinutes = justPaid && available <= 0
+
+  // ---- Activation: no plan yet (and not mid-webhook) → one screen ----
+  if (!hasActiveSub && !awaitingMinutes) {
     return (
       <section className="container section">
         <div className="activate rise">
@@ -144,7 +176,7 @@ export default async function Dashboard() {
     )
   }
 
-  // ---- Active plan: the minutes balance as a fuel gauge ----
+  // ---- Active plan (or post-checkout lag) ----
   const monthly = plan?.monthly_minutes ?? 0
   const frac =
     monthly > 0
@@ -163,8 +195,30 @@ export default async function Dashboard() {
       : { data: [] as { booking_id: string }[] }
   const reviewedBookingIds = new Set((existingReviews ?? []).map((r) => r.booking_id))
 
+  const firstJobHints = FIRST_JOB_HINTS.filter((h) => activeSlugs.has(h.slug))
+  const showFirstJobGuide = bookings.length === 0 && available > 0
+
   return (
     <section className="container section">
+      <MinutesArriving active={awaitingMinutes} />
+
+      {justBooked && (
+        <div
+          className="card rise"
+          role="status"
+          style={{
+            marginBottom: 18,
+            borderColor: 'var(--brand)',
+            background: 'color-mix(in srgb, var(--brand) 6%, transparent)',
+          }}
+        >
+          <p style={{ margin: 0, fontWeight: 600 }}>Booking requested</p>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            We’re matching a vetted pro for your time window. You’ll see updates here.
+          </p>
+        </div>
+      )}
+
       <div
         className="list-row"
         style={{ paddingTop: 0, borderBottom: 'none' }}
@@ -213,7 +267,11 @@ export default async function Dashboard() {
         </div>
 
         <div className="dash-hero-body">
-          <h1>{formatMinutes(available)} of service time left</h1>
+          <h1>
+            {awaitingMinutes
+              ? 'Setting up your service time'
+              : `${formatMinutes(available)} of service time left`}
+          </h1>
           <p>
             {held > 0 ? `${formatMinutes(held)} held for upcoming bookings. ` : ''}
             {plan ? `Your ${plan.name} plan` : 'Your plan'}
@@ -221,18 +279,55 @@ export default async function Dashboard() {
               ? ` refreshes ${formatDateTime(sub.current_period_end)}.`
               : ' refreshes each month.'}
           </p>
-          <Link href="/dashboard/book" className="btn btn-primary">
-            Book a service
-          </Link>
+          {!awaitingMinutes && (
+            <Link href="/dashboard/book" className="btn btn-primary">
+              Book a service
+            </Link>
+          )}
         </div>
       </div>
+
+      {showFirstJobGuide && (
+        <div className="card rise" style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Sparkles size={18} aria-hidden />
+            <h2 style={{ margin: 0, fontSize: 18 }}>Book your first job in 2 minutes</h2>
+          </div>
+          <p className="muted" style={{ margin: '0 0 14px' }}>
+            Pick something common — we’ll use your saved address when you have one,
+            and show exactly how many minutes it uses before you confirm.
+          </p>
+          <div className="grid grid-3" style={{ gap: 12 }}>
+            {(firstJobHints.length > 0 ? firstJobHints : [{ slug: '', label: 'Browse services', blurb: 'See everything we do' }]).map(
+              (h) => (
+                <Link
+                  key={h.slug || 'browse'}
+                  href={h.slug ? `/dashboard/book?service=${encodeURIComponent(h.slug)}` : '/dashboard/book'}
+                  className="card card-hover"
+                  style={{ textDecoration: 'none', color: 'inherit', margin: 0 }}
+                >
+                  <strong style={{ display: 'block', marginBottom: 4 }}>{h.label}</strong>
+                  <span className="muted" style={{ fontSize: 14 }}>
+                    {h.blurb}
+                  </span>
+                </Link>
+              ),
+            )}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Link href="/dashboard/book" className="btn btn-primary">
+              Choose a service
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-2" style={{ marginTop: 18 }}>
         <div className="card">
           <p className="tile-label">Plan</p>
           <p style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 600 }}>
-            {plan?.name ?? 'Plan'}{' '}
-            <span className="tag good">{sub?.status}</span>
+            {plan?.name ?? (awaitingMinutes ? 'Activating…' : 'Plan')}{' '}
+            {sub?.status && <span className="tag good">{sub.status}</span>}
           </p>
           {plan && (
             <p className="muted" style={{ margin: '2px 0' }}>
@@ -271,21 +366,35 @@ export default async function Dashboard() {
           <h2 style={{ margin: 0 }}>Your bookings</h2>
         </div>
         <div className="card" style={{ marginTop: 6 }}>
-          {bookings.length === 0 && (
+          {bookings.length === 0 && !showFirstJobGuide && (
             <p className="muted" style={{ margin: 0 }}>
               No bookings yet.{' '}
               <Link href="/dashboard/book" style={{ color: 'var(--brand)' }}>
-                Book your first service
+                Book a service
               </Link>
             </p>
           )}
+          {bookings.length === 0 && showFirstJobGuide && (
+            <p className="muted" style={{ margin: 0 }}>
+              Your list will show up here after you book.
+            </p>
+          )}
           {bookings.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            const service = (b.services ?? null) as {
+              name: string
+              icon: string | null
+              slug: string
+            } | null
             const provider = (b.providers ?? null) as
               | { id: string; business_name: string; rating: number | null }
               | null
             const cancellable = b.status === 'requested' || b.status === 'confirmed'
-            const needsReview = b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
+            const needsReview =
+              b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
+            const bookAgainHref =
+              service?.slug
+                ? `/dashboard/book?service=${encodeURIComponent(service.slug)}&duration=${b.duration_minutes}`
+                : '/dashboard/book'
             return (
               <div key={b.id} className="list-row" style={{ flexWrap: 'wrap' }}>
                 <div>
@@ -303,9 +412,16 @@ export default async function Dashboard() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className={STATUS_TAG[b.status] ?? 'tag'}>
+                    {STATUS_LABEL[b.status] ?? b.status}
+                  </span>
                   {cancellable && <CancelBookingButton bookingId={b.id} />}
+                  {b.status === 'completed' && (
+                    <Link href={bookAgainHref} className="btn btn-ghost">
+                      Book again
+                    </Link>
+                  )}
                 </div>
                 {needsReview && provider && (
                   <ReviewForm bookingId={b.id} providerId={provider.id} />
