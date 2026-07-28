@@ -6,7 +6,18 @@ import { formatMinutes } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
-export default async function BookPage() {
+export default async function BookPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ service?: string; duration?: string }>
+}) {
+  const { service: serviceSlug, duration: durationRaw } = await searchParams
+  const initialDuration = durationRaw ? Number(durationRaw) : undefined
+  const durationOk =
+    initialDuration != null && Number.isFinite(initialDuration) && initialDuration >= 30
+      ? Math.min(600, Math.round(initialDuration))
+      : undefined
+
   const supabase = await createClient()
 
   const {
@@ -81,6 +92,8 @@ export default async function BookPage() {
             city: profileRes.data?.city ?? '',
             postal_code: profileRes.data?.postal_code ?? '',
           }}
+          initialServiceSlug={serviceSlug ?? null}
+          initialDurationMinutes={durationOk}
         />
       </div>
     </section>

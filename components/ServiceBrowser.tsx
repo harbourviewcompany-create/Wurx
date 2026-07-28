@@ -57,23 +57,29 @@ export function ServiceBrowser({
   availableMinutes,
   canBook,
   defaults,
+  initialServiceSlug = null,
+  initialDurationMinutes,
 }: {
   services: BrowsableService[]
   availableMinutes: number
   canBook: boolean
   defaults: { address_line1: string; city: string; postal_code: string }
+  /** Deep-link from dashboard “Book again” / first-job hints. */
+  initialServiceSlug?: string | null
+  initialDurationMinutes?: number
 }) {
   const router = useRouter()
   const searchRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const didAutoSelect = useRef(false)
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<BrowsableService | null>(null)
 
-  // Booking state
+  // Booking state — default first time chip to tomorrow 9am for less friction
   const [duration, setDuration] = useState(120)
-  const [start, setStart] = useState('')
+  const [start, setStart] = useState(() => preset(1, 9))
   const [address, setAddress] = useState(defaults.address_line1)
   const [city, setCity] = useState(defaults.city)
   const [postal, setPostal] = useState(defaults.postal_code)
@@ -81,10 +87,32 @@ export function ServiceBrowser({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Book-again / first-job deep link: open the right service once.
+  useEffect(() => {
+    if (didAutoSelect.current || !initialServiceSlug) return
+    const match = services.find((s) => s.slug === initialServiceSlug)
+    if (!match) return
+    didAutoSelect.current = true
+    setSelected(match)
+    setDuration(
+      initialDurationMinutes && initialDurationMinutes >= 30
+        ? initialDurationMinutes
+        : match.default_duration_minutes,
+    )
+    setError(null)
+    requestAnimationFrame(() =>
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
+  }, [initialServiceSlug, initialDurationMinutes, services])
+
   // "/" focuses search — a small power-user touch that costs nothing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA'
+      ) {
         e.preventDefault()
         searchRef.current?.focus()
       }
@@ -143,6 +171,21 @@ export function ServiceBrowser({
       setError(rpcError.message)
       setLoading(false)
       return
+    }
+
+    // Best-effort: remember address for the next booking (profile is source of prefill).
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user && (address.trim() || city.trim() || postal.trim())) {
+      await supabase
+        .from('profiles')
+        .update({
+          address_line1: address.trim() || null,
+          city: city.trim() || null,
+          postal_code: postal.trim() || null,
+        })
+        .eq('id', user.id)
     }
 
     router.push('/dashboard?booked=1')
@@ -280,6 +323,11 @@ export function ServiceBrowser({
                 : `${formatMinutes(shortfall)} short`}
             </div>
           </div>
+
+          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
+            Minutes are held when you book and only used when the job is completed.
+            Cancel anytime before then to release the hold.
+          </p>
 
           {canBook ? (
             <button
