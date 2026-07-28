@@ -4,11 +4,14 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { startCheckoutSession } from '@/lib/checkout'
 
 function LoginForm() {
   const router = useRouter()
   const params = useSearchParams()
   const redirectTo = params.get('redirect') || '/dashboard'
+  const priceId = params.get('priceId')
+  const planSlug = params.get('plan')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,7 +23,7 @@ function LoginForm() {
     setError(null)
     setLoading(true)
     const supabase = createClient()
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -29,14 +32,42 @@ function LoginForm() {
       setLoading(false)
       return
     }
+
+    if (priceId && data.user) {
+      try {
+        const url = await startCheckoutSession(supabase, data.user.id, priceId)
+        window.location.href = url
+        return
+      } catch (checkoutErr) {
+        setError(
+          checkoutErr instanceof Error
+            ? checkoutErr.message
+            : 'Signed in, but checkout failed. Open Pricing to continue.',
+        )
+        setLoading(false)
+        return
+      }
+    }
+
     router.push(redirectTo)
     router.refresh()
   }
+
+  const signupHref = priceId
+    ? `/signup?priceId=${encodeURIComponent(priceId)}${
+        planSlug ? `&plan=${encodeURIComponent(planSlug)}` : ''
+      }`
+    : '/signup'
 
   return (
     <div className="form">
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Log in</h2>
+        {priceId && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            After you log in, we\'ll open secure checkout for your plan.
+          </p>
+        )}
         <form onSubmit={onSubmit}>
           {error && <div className="form-error">{error}</div>}
           {params.get('error') === 'auth' && (
@@ -73,12 +104,18 @@ function LoginForm() {
             disabled={loading}
             style={{ width: '100%', marginTop: 20 }}
           >
-            {loading ? 'Logging in…' : 'Log in'}
+            {loading
+              ? priceId
+                ? 'Logging in & opening checkout…'
+                : 'Logging in…'
+              : priceId
+                ? 'Log in & continue to checkout'
+                : 'Log in'}
           </button>
         </form>
         <p className="form-note">
           New to Wurx?{' '}
-          <Link href="/signup" style={{ color: 'var(--brand)' }}>
+          <Link href={signupHref} style={{ color: 'var(--brand)' }}>
             Create an account
           </Link>
         </p>

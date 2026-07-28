@@ -1,7 +1,15 @@
 # Wurx — Production readiness
 
 Status as of this branch. ✅ = done, ⛳ = remaining (needs dashboard/secret access
-that isn't available through the automated tooling), 🔭 = phase 2.
+that isn't available through the automated tooling), 🔭 = later.
+
+**Customer conversion path & implementation order:** see
+[`docs/FUNNEL_PLAYBOOK.md`](./FUNNEL_PLAYBOOK.md) — route map, F1–F5 tickets,
+merge order, and smoke checklist. Use that before opening funnel or Phase 2 PRs.
+
+> **Shell polish remainder (PR #13):** do not merge #13. Unique leftovers are
+> ticketed in [`docs/PR13_CHERRY_PICK.md`](./PR13_CHERRY_PICK.md) (R1–R6).
+> Open: [PR #36](https://github.com/harbourviewcompany-create/Wurx/pull/36) (R1 + R2).
 
 ## ✅ Done
 
@@ -47,6 +55,33 @@ webhook. A live restricted key (`rk_live_…`) is stored there.
 > Read**. If a subscribe attempt returns a permissions error, widen the key's
 > scopes in the Stripe Dashboard (or store a full `sk_live_…` in Vault instead).
 
+## ✅ Phase 2 product surface (shipped)
+
+These were listed as “not built” earlier; they exist on `main` and this branch:
+
+- **Provider onboarding** — `/become-a-pro` + `ProviderApplyForm`. Applications now
+  land as `verification = pending`, `is_active = false` until an admin verifies.
+- **Provider dashboard** — open jobs (RLS-matched), claim, complete, payouts,
+  reviews, notifications.
+- **Provider profile + availability** — services, areas, weekly hours, blackouts.
+- **Matching** — `provider_can_serve_booking` (service + FSA + availability +
+  blackout + verification + insurance). Shared by claim path, open-jobs RLS, and
+  admin assignment.
+- **Admin console** — bookings (status + assign + redispatch), providers
+  (verify/reject with insurance + background-check dates, activate, payout),
+  services, plans, users.
+- **Review submission** — `ReviewForm` on completed customer bookings; rating
+  sync trigger on `providers.rating`.
+- **Customer profile + subscription management** — profile edit + Stripe billing
+  portal button.
+- **Job fan-out / multi-offer** — matching verified providers get offers;
+  accept/decline via `respond_to_offer`; in-app notifications (email when Resend
+  is configured).
+- **Funnel F1** — plan/priceId preserved through signup and login into checkout
+  (`lib/checkout.ts`, `PlanCheckoutButton`, signup/login pages).
+- **Funnel F2** — effective rate (`~$X/h of service time`) + example job copy on
+  home and pricing cards.
+
 ## ⛳ Remaining to go live (owner action)
 
 ### 1. Live end-to-end test
@@ -66,6 +101,16 @@ Subscribe → `checkout.session.completed` records the subscription →
 `invoice.paid` grants minutes to `hour_ledger` → dashboard shows the balance →
 book a service (holds minutes) → complete (consumes) / cancel (releases).
 
+### 4. Apply new migrations on the live project
+```bash
+supabase db push
+# or apply any Phase 2 / multi-offer migrations not yet on the project:
+#   20260727120000_wurx_phase2_provider_ops.sql
+#   20260727120100_wurx_admin_provider_compliance.sql
+#   20260727205754_wurx_multi_offer_dispatch.sql
+#   …
+```
+
 ## Known advisor notes (accepted)
 
 - `authenticated_security_definer_function_executable` (0029) fires for the three
@@ -73,19 +118,16 @@ book a service (holds minutes) → complete (consumes) / cancel (releases).
   users and each re-checks `auth.uid()` and ownership internally. `anon` execute
   has been revoked.
 
-## 🔭 Phase 2 (not built)
+## 🔭 Later (nice-to-have, not launch blockers)
 
-- Provider onboarding, verification, and job dispatch UI (the `job_offers`,
-  `provider_earnings`, `provider_availability` tables and the
-  `dispatchable_providers` view already exist to support it).
-- Admin console (booking assignment, provider verification, `complete_booking`
-  for ops until provider dispatch exists).
-- Review submission UI (the `reviews` table + insert policy already exist).
-- Customer profile editing and subscription management (cancel/change plan) UI.
+- Document upload for insurance / background-check evidence (dates are recorded
+  today; files are not).
+- Provider map / radius-based geo match beyond FSA lists.
+- Funnel F3 optional “minutes arriving…” state if webhook lags after checkout.
 
 ---
 
-## Platform hardening (this pass)
+## Platform hardening (prior pass)
 
 Closed most of the remaining gaps. Everything below is **applied to the live
 project and verified**, not just committed.
@@ -136,3 +178,4 @@ project and verified**, not just committed.
 5. **Rotate the `rk_live_` key** that was pasted in chat.
 6. **Fix the `main` branch-protection rule** — it requires two status-check
    contexts nothing produces, which blocks every PR.
+7. **Apply Phase 2 / multi-offer migrations** on the live Supabase project (see above).

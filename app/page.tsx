@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatMinutes, formatPrice } from '@/lib/format'
+import { formatEffectiveRate, formatMinutes, formatPrice } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
 export const revalidate = 300
@@ -20,6 +20,13 @@ const STEPS = [
     body: 'A vetted local pro handles the job. We deduct only the minutes you actually use.',
   },
 ]
+
+/** One concrete job example per plan slug for conversion clarity (F2). */
+const PLAN_EXAMPLES: Record<string, string> = {
+  starter: 'e.g. one deep clean or a few snow clears',
+  home: 'e.g. bi-weekly clean + lawn in season',
+  plus: 'e.g. weekly clean + handyman + outdoor care',
+}
 
 export default async function Home() {
   const supabase = await createClient()
@@ -59,16 +66,16 @@ export default async function Home() {
           only spend the minutes you use.
         </p>
         <div className="cta">
-          <Link href="/signup" className="btn btn-primary btn-lg">
-            Get started
+          <Link href="/pricing" className="btn btn-primary btn-lg">
+            Choose a plan
           </Link>
-          <Link href="/pricing" className="btn btn-lg">
-            See plans
+          <Link href="#how-it-works" className="btn btn-lg">
+            See how it works
           </Link>
         </div>
         <div className="trust-row" style={{ marginTop: 22 }}>
           <span>
-            <ShieldCheck size={16} /> Vetted &amp; insured pros
+            <ShieldCheck size={16} /> Vetted & insured pros
           </span>
           <span>
             <Check size={16} /> No contracts
@@ -106,7 +113,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="container section">
+      <section id="how-it-works" className="container section">
         <div className="section-head">
           <span className="eyebrow">How it works</span>
           <h2>Three steps to a handled home</h2>
@@ -124,7 +131,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="container section">
+      <section id="plans" className="container section">
         <div className="section-head">
           <span className="eyebrow">Pricing</span>
           <h2>Simple monthly plans</h2>
@@ -132,6 +139,8 @@ export default async function Home() {
         <div className="plans">
           {planList.map((p, i) => {
             const featured = i === featuredIndex
+            const rate = formatEffectiveRate(p.price_cents, p.monthly_minutes)
+            const example = PLAN_EXAMPLES[p.slug]
             return (
               <div
                 key={p.slug}
@@ -146,14 +155,30 @@ export default async function Home() {
                 <p className="muted" style={{ margin: '2px 0 0' }}>
                   {formatMinutes(p.monthly_minutes)} of service time each month
                 </p>
+                {rate && (
+                  <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
+                    {rate}
+                  </p>
+                )}
+                {example && (
+                  <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>
+                    {example}
+                  </p>
+                )}
                 <div className="plan-cta" style={{ marginTop: 'auto' }}>
                   <Link
-                    href="/pricing"
+                    href={`/pricing?plan=${p.slug}`}
                     className={`btn btn-lg${featured ? ' btn-primary' : ''}`}
                     style={{ width: '100%' }}
                   >
                     Choose {p.name}
                   </Link>
+                  <p
+                    className="muted"
+                    style={{ margin: '10px 0 0', fontSize: 12, textAlign: 'center' }}
+                  >
+                    Account + secure checkout — cancel anytime.
+                  </p>
                 </div>
               </div>
             )
