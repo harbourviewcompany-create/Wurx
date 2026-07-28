@@ -3,7 +3,18 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Clock, Minus, Plus, Search, ShieldCheck, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  Clock,
+  MapPin,
+  Minus,
+  Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMinutes, formatPostalCode, postalFsa } from '@/lib/format'
 import { affordability, serviceCostMinutes } from '@/lib/booking'
@@ -23,10 +34,25 @@ export type BrowsableService = {
 type Filter = 'all' | 'quick' | 'licensed'
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All services' },
-  { key: 'quick', label: 'Quick jobs' },
+  { key: 'all', label: 'All' },
+  { key: 'quick', label: 'Under 1 hour' },
   { key: 'licensed', label: 'Licensed pro' },
 ]
+
+/** Rank services for the current season so the first screen feels smart. */
+function seasonalRank(slug: string): number {
+  const month = new Date().getMonth() // 0=Jan … 7=Aug
+  // Late summer / early fall in Ottawa: outdoor + clean first, snow last.
+  if (month >= 3 && month <= 9) {
+    const order = ['lawn-garden', 'lawn', 'home-cleaning', 'cleaning', 'handyman', 'snow-removal', 'snow']
+    const i = order.findIndex((s) => slug.includes(s) || s.includes(slug))
+    return i >= 0 ? i : 50
+  }
+  // Winter: snow + clean + handyman.
+  const winter = ['snow-removal', 'snow', 'home-cleaning', 'cleaning', 'handyman', 'lawn-garden', 'lawn']
+  const i = winter.findIndex((s) => slug.includes(s) || s.includes(slug))
+  return i >= 0 ? i : 50
+}
 
 function costOf(service: BrowsableService, minutes: number) {
   return serviceCostMinutes(minutes, service.credit_multiplier)
@@ -45,9 +71,32 @@ function presetLabel(days: number, hour: number) {
   d.setDate(d.getDate() + days)
   d.setHours(hour, 0, 0, 0)
   const day =
-    days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : d.toLocaleDateString('en-CA', { weekday: 'short' })
+    days === 0
+      ? 'Today'
+      : days === 1
+        ? 'Tomorrow'
+        : d.toLocaleDateString('en-CA', { weekday: 'short' })
   const time = d.toLocaleTimeString('en-CA', { hour: 'numeric', hour12: true }).replace(/\s/g, '')
-  return `${day} ${time}`
+  return `${day} · ${time}`
+}
+
+/** Next Saturday (or this Saturday if still upcoming). */
+function daysUntilSaturday(): number {
+  const day = new Date().getDay() // 0 Sun … 6 Sat
+  const delta = (6 - day + 7) % 7
+  return delta === 0 ? 7 : delta
+}
+
+function hasSavedAddress(defaults: {
+  address_line1: string
+  city: string
+  postal_code: string
+}) {
+  return Boolean(
+    defaults.address_line1.trim() &&
+      defaults.city.trim() &&
+      defaults.postal_code.trim().length >= 3,
+  )
 }
 
 export function ServiceBrowser({
@@ -80,6 +129,7 @@ export function ServiceBrowser({
   const [city, setCity] = useState(defaults.city)
   const [postal, setPostal] = useState(defaults.postal_code)
   const [notes, setNotes] = useState('')
+  const [editAddress, setEditAddress] = useState(!hasSavedAddress(defaults))
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -118,7 +168,7 @@ export function ServiceBrowser({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return services.filter((s) => {
+    const filtered = services.filter((s) => {
       if (filter === 'quick' && s.default_duration_minutes > 60) return false
       if (filter === 'licensed' && !s.requires_licensed_provider) return false
       if (!q) return true
@@ -128,13 +178,16 @@ export function ServiceBrowser({
         (s.description ?? '').toLowerCase().includes(q)
       )
     })
+    return filtered.sort((a, b) => seasonalRank(a.slug) - seasonalRank(b.slug))
   }, [services, query, filter])
 
   function choose(service: BrowsableService) {
     setSelected(service)
     setDuration(service.default_duration_minutes)
     setError(null)
-    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() =>
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
   }
 
   function onPostalBlur() {
@@ -146,14 +199,31 @@ export function ServiceBrowser({
   const { affordable, shortfall, remaining } = affordability(cost, availableMinutes)
   const fsa = postalFsa(postal)
 
+  const durationChips = useMemo(() => {
+    if (!selected) return [] as number[]
+    const base = selected.default_duration_minutes
+    const set = new Set(
+      [Math.max(30, base - 30), base, Math.min(600, base + 30), Math.min(600, base + 60)].filter(
+        (n) => n >= 30,
+      ),
+    )
+    return Array.from(set).sort((a, b) => a - b)
+  }, [selected])
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!selected) return
     setError(null)
 
-    if (!start) return setError('Please choose a date and time.')
-    if (new Date(start).getTime() < Date.now()) return setError('Please choose a time in the future.')
-    if (!affordable) return setError(`That booking needs ${formatMinutes(shortfall)} more than you have.`)
+    if (!start) return setError('Pick a day and time so we know when to send a pro.')
+    if (new Date(start).getTime() < Date.now())
+      return setError('That time is in the past — pick a future slot.')
+    if (!address.trim() || !city.trim() || !postal.trim())
+      return setError('Add your address so the pro knows where to go.')
+    if (!affordable)
+      return setError(
+        `You need about ${formatMinutes(shortfall)} more plan time for this job.`,
+      )
 
     const postalNorm = formatPostalCode(postal)
 
@@ -194,11 +264,20 @@ export function ServiceBrowser({
   }
 
   if (selected) {
+    const sat = daysUntilSaturday()
     const presets: [number, number][] = [
+      [0, 14], // today afternoon if still valid
       [1, 9],
       [1, 13],
-      [2, 9],
-    ]
+      [sat, 10],
+    ].filter(([d, h]) => {
+      const t = new Date()
+      t.setDate(t.getDate() + d)
+      t.setHours(h, 0, 0, 0)
+      return t.getTime() > Date.now() + 30 * 60 * 1000
+    }) as [number, number][]
+
+    const savedSummary = [address, city, formatPostalCode(postal)].filter(Boolean).join(' · ')
 
     return (
       <div ref={panelRef} className="booking-panel rise">
@@ -213,7 +292,7 @@ export function ServiceBrowser({
           <div>
             <h2 style={{ margin: 0 }}>{selected.name}</h2>
             <p className="muted" style={{ margin: '2px 0 0' }}>
-              {selected.description ?? 'Booked with the minutes in your plan.'}
+              {selected.description ?? 'A vetted local pro handles it for you.'}
             </p>
           </div>
         </div>
@@ -221,7 +300,7 @@ export function ServiceBrowser({
         <form className="card booking-form" onSubmit={submit} style={{ marginTop: 16 }}>
           {error && <div className="form-error">{error}</div>}
 
-          <p className="tile-label">When should we come?</p>
+          <p className="tile-label">1 · When should we come?</p>
           <div className="chip-row" style={{ marginBottom: 10 }}>
             {presets.map(([d, h]) => {
               const value = preset(d, h)
@@ -249,99 +328,134 @@ export function ServiceBrowser({
           />
 
           <p className="tile-label" style={{ marginTop: 22 }}>
-            How long do you need?
+            2 · How long do you need?
           </p>
+          <div className="chip-row" style={{ marginBottom: 12 }}>
+            {durationChips.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`chip${duration === m ? ' chip-on' : ''}`}
+                onClick={() => setDuration(m)}
+              >
+                {m === selected.default_duration_minutes ? `Standard · ${formatMinutes(m)}` : formatMinutes(m)}
+              </button>
+            ))}
+          </div>
           <div className="stepper-row">
             <button
               type="button"
               className="step-btn"
               onClick={() => setDuration((d) => Math.max(30, d - 15))}
-              aria-label="Decrease by 15 minutes"
+              aria-label="15 minutes less"
             >
               <Minus size={18} />
             </button>
             <div className="stepper-value">
               <strong>{formatMinutes(duration)}</strong>
-              <small className="muted">on site</small>
+              <small className="muted">pro on site</small>
             </div>
             <button
               type="button"
               className="step-btn"
               onClick={() => setDuration((d) => Math.min(600, d + 15))}
-              aria-label="Increase by 15 minutes"
+              aria-label="15 minutes more"
             >
               <Plus size={18} />
             </button>
           </div>
 
           <p className="tile-label" style={{ marginTop: 22 }}>
-            Where?
+            3 · Where?
           </p>
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Street address"
-            aria-label="Street address"
-            autoComplete="street-address"
-          />
-          <div className="grid grid-2" style={{ gap: 12, marginTop: 10 }}>
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="City"
-              aria-label="City"
-              autoComplete="address-level2"
-            />
-            <div>
+          {!editAddress && savedSummary ? (
+            <div className="saved-address">
+              <MapPin size={16} aria-hidden="true" />
+              <span>{savedSummary}</span>
+              <button
+                type="button"
+                className="link-quiet"
+                onClick={() => setEditAddress(true)}
+                style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <Pencil size={14} /> Change
+              </button>
+            </div>
+          ) : (
+            <>
               <input
                 type="text"
-                value={postal}
-                onChange={(e) => setPostal(e.target.value)}
-                onBlur={onPostalBlur}
-                placeholder="Postal code (K1A 0B1)"
-                aria-label="Postal code"
-                autoComplete="postal-code"
-                inputMode="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Street address"
+                aria-label="Street address"
+                autoComplete="street-address"
               />
-              {fsa.length === 3 && (
-                <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
-                  Matching pros in <strong style={{ color: 'var(--text)' }}>{fsa}</strong>
-                </p>
-              )}
-            </div>
-          </div>
+              <div className="grid grid-2" style={{ gap: 12, marginTop: 10 }}>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  aria-label="City"
+                  autoComplete="address-level2"
+                />
+                <div>
+                  <input
+                    type="text"
+                    value={postal}
+                    onChange={(e) => setPostal(e.target.value)}
+                    onBlur={onPostalBlur}
+                    placeholder="Postal code (K1A 0B1)"
+                    aria-label="Postal code"
+                    autoComplete="postal-code"
+                    inputMode="text"
+                  />
+                  {fsa.length === 3 && (
+                    <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
+                      Matching Ottawa pros near <strong style={{ color: 'var(--text)' }}>{fsa}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           <p className="tile-label" style={{ marginTop: 22 }}>
-            Anything the pro should know?
+            Anything the pro should know? <span className="muted" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>(optional)</span>
           </p>
           <textarea
-            rows={3}
+            rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Gate code, pets, where to park…"
+            placeholder="Gate code, pets, parking, key under the mat…"
             aria-label="Notes for the pro"
           />
 
           <div className="cost-summary">
             <div>
-              <span className="muted">This booking uses</span>
+              <span className="muted">From your plan</span>
               <strong className={affordable ? '' : 'over'}>{formatMinutes(cost)}</strong>
             </div>
             <div className="muted cost-after">
               {affordable
-                ? `${formatMinutes(remaining)} left after`
-                : `${formatMinutes(shortfall)} short`}
+                ? `${formatMinutes(remaining)} still available after`
+                : `Need ${formatMinutes(shortfall)} more`}
             </div>
           </div>
 
-          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
-            Minutes are held when you book and only used when the job is completed.
-            Cancel anytime before then to release the hold.
-          </p>
+          <ul className="reassure-list">
+            <li>
+              <Check size={14} /> Minutes held now — only used when the job is done
+            </li>
+            <li>
+              <Check size={14} /> Cancel free anytime before the pro starts
+            </li>
+            <li>
+              <Check size={14} /> We’ll match a local pro and notify you
+            </li>
+          </ul>
 
-          {/* Desktop / inline confirm */}
           <div className="booking-confirm-inline">
             {canBook ? (
               <button
@@ -350,7 +464,7 @@ export function ServiceBrowser({
                 disabled={loading || !affordable}
                 style={{ width: '100%', marginTop: 14 }}
               >
-                {loading ? 'Booking…' : 'Confirm booking'}
+                {loading ? 'Booking…' : 'Book this job'}
               </button>
             ) : (
               <Link
@@ -363,11 +477,10 @@ export function ServiceBrowser({
             )}
           </div>
 
-          {/* Mobile sticky confirm — always thumb-reachable */}
           <div className="booking-sticky" aria-hidden={false}>
             <div className="booking-sticky-inner">
               <div className="booking-sticky-cost">
-                <span className="muted">Uses</span>
+                <span className="muted">From plan</span>
                 <strong className={affordable ? '' : 'over'}>{formatMinutes(cost)}</strong>
               </div>
               {canBook ? (
@@ -376,7 +489,7 @@ export function ServiceBrowser({
                   type="submit"
                   disabled={loading || !affordable}
                 >
-                  {loading ? 'Booking…' : 'Confirm'}
+                  {loading ? 'Booking…' : 'Book job'}
                 </button>
               ) : (
                 <Link href="/pricing" className="btn btn-primary">
@@ -398,13 +511,19 @@ export function ServiceBrowser({
           ref={searchRef}
           type="search"
           className="search-input"
-          placeholder="What do you need done?"
+          placeholder="Try “clean”, “lawn”, “snow”…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search services"
+          enterKeyHint="search"
         />
         {query && (
-          <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+          <button
+            type="button"
+            className="search-clear"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+          >
             <X size={16} />
           </button>
         )}
@@ -425,9 +544,9 @@ export function ServiceBrowser({
 
       {results.length === 0 ? (
         <div className="card empty-state" style={{ marginTop: 20 }}>
-          <p style={{ margin: 0, fontWeight: 600 }}>No services match “{query}”.</p>
+          <p style={{ margin: 0, fontWeight: 600 }}>No match for “{query}”.</p>
           <p className="muted" style={{ margin: '6px 0 14px' }}>
-            Try a different word, or browse everything.
+            Try “cleaning”, “lawn”, or “handyman” — or browse everything.
           </p>
           <button
             type="button"
@@ -465,16 +584,17 @@ export function ServiceBrowser({
                 </div>
                 <h3>{s.name}</h3>
                 <p className="muted service-card-desc">
-                  {s.description ?? 'Booked with the minutes in your plan.'}
+                  {s.description ?? 'A vetted local pro handles it for you.'}
                 </p>
                 <div className="service-card-foot">
                   <span className="muted">
-                    <Clock size={14} /> {formatMinutes(s.default_duration_minutes)} on site
+                    <Clock size={14} /> {formatMinutes(s.default_duration_minutes)} visit
                   </span>
                   <span className={tooPricey ? 'cost-pill over' : 'cost-pill'}>
-                    uses {formatMinutes(c)}
+                    {tooPricey ? 'Needs more time' : `${formatMinutes(c)} from plan`}
                   </span>
                 </div>
+                <span className="service-card-cta">Book</span>
               </button>
             )
           })}

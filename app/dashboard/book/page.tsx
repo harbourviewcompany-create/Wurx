@@ -6,6 +6,9 @@ import { formatMinutes } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
+/** Rough “standard clean” cost for plain-language balance (~3h visit × 1.0). */
+const STANDARD_CLEAN_MINUTES = 180
+
 export default async function BookPage({
   searchParams,
 }: {
@@ -46,11 +49,8 @@ export default async function BookPage({
   ])
 
   const available = balanceRes.data?.available_minutes ?? 0
-  // request_booking() only ever checks available minutes server-side, not
-  // subscription status — this matches that, so minutes from any source
-  // (an active plan, an admin grant, a refund) are actually spendable
-  // instead of being hidden behind a subscription row that may not exist.
   const canBook = available > 0
+  const approxCleans = Math.max(0, Math.floor(available / STANDARD_CLEAN_MINUTES))
 
   const services = (servicesRes.data ?? []).map((s) => ({
     ...s,
@@ -61,17 +61,26 @@ export default async function BookPage({
     <section className="container section">
       <div className="browse-head">
         <div>
-          <h1 style={{ margin: 0 }}>Book a service</h1>
-          <p className="muted" style={{ margin: '4px 0 0' }}>
+          <h1 style={{ margin: 0 }}>What do you need done?</h1>
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 420 }}>
             {canBook ? (
               <>
-                <strong style={{ color: 'var(--text)' }}>
-                  {formatMinutes(available)}
-                </strong>{' '}
-                of service time available
+                You have{' '}
+                <strong style={{ color: 'var(--text)' }}>{formatMinutes(available)}</strong> in
+                your plan
+                {approxCleans > 0 ? (
+                  <>
+                    {' '}
+                    — enough for about{' '}
+                    <strong style={{ color: 'var(--text)' }}>
+                      {approxCleans} standard clean{approxCleans === 1 ? '' : 's'}
+                    </strong>
+                  </>
+                ) : null}
+                . Tap a service to book in under a minute.
               </>
             ) : (
-              'Browse everything we do — start a plan when you’re ready.'
+              'Browse what we cover — pick a plan when you’re ready to book.'
             )}
           </p>
         </div>
