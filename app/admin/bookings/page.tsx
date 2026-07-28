@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
@@ -17,22 +18,47 @@ const STATUSES = ['requested', 'confirmed', 'in_progress', 'completed', 'cancell
 
 export default async function AdminBookingsPage() {
   const supabase = await createClient()
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
 
-  const [bookingsRes, providersRes, offersRes] = await Promise.all([
-    supabase
-      .from('bookings')
-      .select('id, user_id, status, scheduled_start, duration_minutes, provider_id, services(name, icon)')
-      .order('scheduled_start', { ascending: false })
-      .limit(100),
-    supabase.from('dispatchable_providers').select('id, business_name'),
-    supabase
-      .from('job_offers')
-      .select('booking_id, status')
-      .in('status', ['offered', 'accepted', 'declined', 'expired', 'withdrawn']),
-  ])
+  const [bookingsRes, providersRes, offersRes, pendingProvidersRes, openOffersRes] =
+    await Promise.all([
+      supabase
+        .from('bookings')
+        .select('id, user_id, status, scheduled_start, duration_minutes, provider_id, created_at, services(name, icon)')
+        .order('scheduled_start', { ascending: false })
+        .limit(100),
+      supabase.from('dispatchable_providers').select('id, business_name'),
+      supabase
+        .from('job_offers')
+        .select('booking_id, status')
+        .in('status', ['offered', 'accepted', 'declined', 'expired', 'withdrawn']),
+      supabase
+        .from('providers')
+        .select('id, business_name, verification, created_at')
+        .in('verification', ['pending', 'unverified'])
+        .order('created_at', { ascending: true })
+        .limit(20),
+      supabase
+        .from('job_offers')
+        .select('id, booking_id, expires_at')
+        .eq('status', 'offered')
+        .gt('expires_at', new Date().toISOString())
+        .lt('expires_at', new Date(Date.now() + 15 * 60 * 1000).toISOString())
+        .limit(30),
+    ])
 
   const bookings = bookingsRes.data ?? []
   const providers = providersRes.data ?? []
+  const pendingProviders = pendingProvidersRes.data ?? []
+  const expiringSoon = openOffersRes.data ?? []
+
+  const staleUnassigned = bookings.filter(
+    (b) =>
+      b.status === 'requested' &&
+      !b.provider_id &&
+      b.created_at &&
+      b.created_at < twoHoursAgo,
+  )
 
   const offerStats = new Map<string, { offered: number; accepted: number; declined: number }>()
   for (const o of offersRes.data ?? []) {
@@ -67,86 +93,160 @@ export default async function AdminBookingsPage() {
     }),
   )
 
+  const needsAttention =
+    pendingProviders.length > 0 || staleUnassigned.length > 0 || expiringSoon.length > 0
+
   return (
-    <div className="card" style={{ marginTop: 18 }}>
-      {bookings.length === 0 && (
-        <p className="muted" style={{ margin: 0 }}>
-          No bookings yet.
-        </p>
-      )}
-      {bookings.map((b) => {
-        const service = (b.services ?? null) as { name: string; icon: string | null } | null
-        const customer = customerById.get(b.user_id) ?? null
-        const isAssignable = b.status === 'requested' || b.status === 'confirmed'
-        const stats = offerStats.get(b.id)
-        return (
-          <div key={b.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ minWidth: 220 }}>
-              <strong className="card-heading">
-                <ServiceIcon name={service?.icon} size={16} />
-                {service?.name ?? 'Service'}
-              </strong>
-              <div className="muted" style={{ fontSize: 14 }}>
-                {customer?.full_name ?? customer?.email ?? 'Unknown customer'}
-              </div>
-              <div className="muted" style={{ fontSize: 14 }}>
-                {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-              </div>
-              {stats && (
-                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                  Offers: {stats.offered} open · {stats.accepted} accepted · {stats.declined} declined
-                </div>
+    <>
+      {needsAttention && (
+        <div className="card" style={{ marginTop: 18, borderColor: 'rgba(168, 121, 31, 0.45)' }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>Needs attention</h2>
+          <div className="grid grid-3" style={{ gap: 14 }}>
+            <div>
+              <p className="tile-label" style={{ marginBottom: 6 }}>
+                Provider verification
+              </p>
+              {pendingProviders.length === 0 ? (
+                <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+                  None pending
+                </p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14 }}>
+                  {pendingProviders.slice(0, 5).map((p) => (
+                    <li key={p.id}>
+                      {p.business_name}{' '}
+                      <span className="tag warn">{p.verification}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href="/admin/providers"
+                style={{ color: 'var(--brand)', fontSize: 13, fontWeight: 600 }}
+              >
+                Review providers →
+              </Link>
+            </div>
+            <div>
+              <p className="tile-label" style={{ marginBottom: 6 }}>
+                Unassigned &gt; 2h
+              </p>
+              {staleUnassigned.length === 0 ? (
+                <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+                  None
+                </p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14 }}>
+                  {staleUnassigned.slice(0, 5).map((b) => {
+                    const service = (b.services ?? null) as { name: string } | null
+                    return (
+                      <li key={b.id}>
+                        {service?.name ?? 'Job'} · {formatDateTime(b.scheduled_start)}
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
             </div>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
-
-              <form action={setBookingStatus} style={{ display: 'flex', gap: 6 }}>
-                <input type="hidden" name="bookingId" value={b.id} />
-                <select name="status" defaultValue={b.status} style={{ width: 'auto' }}>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn" type="submit">
-                  Save
-                </button>
-              </form>
-
-              {isAssignable && (
-                <form action={assignProvider} style={{ display: 'flex', gap: 6 }}>
-                  <input type="hidden" name="bookingId" value={b.id} />
-                  <select name="providerId" defaultValue={b.provider_id ?? ''} style={{ width: 'auto' }}>
-                    <option value="">Unassigned</option>
-                    {providers
-                      .filter((p) => p.id && eligibleByBooking.get(b.id)?.has(p.id))
-                      .map((p) => (
-                        <option key={p.id} value={p.id ?? ''}>
-                          {p.business_name}
-                        </option>
-                      ))}
-                  </select>
-                  <button className="btn" type="submit">
-                    Assign
-                  </button>
-                </form>
-              )}
-
-              {b.status === 'requested' && !b.provider_id && (
-                <form action={redispatchOffers}>
-                  <input type="hidden" name="bookingId" value={b.id} />
-                  <button className="btn btn-ghost" type="submit" title="Create offers for newly matching providers">
-                    Redispatch
-                  </button>
-                </form>
+            <div>
+              <p className="tile-label" style={{ marginBottom: 6 }}>
+                Offers expiring &lt; 15m
+              </p>
+              {expiringSoon.length === 0 ? (
+                <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+                  None
+                </p>
+              ) : (
+                <p style={{ margin: 0, fontSize: 14 }}>
+                  <strong>{expiringSoon.length}</strong> open offer
+                  {expiringSoon.length === 1 ? '' : 's'} about to expire
+                </p>
               )}
             </div>
           </div>
-        )
-      })}
-    </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 18 }}>
+        {bookings.length === 0 && (
+          <p className="muted" style={{ margin: 0 }}>
+            No bookings yet.
+          </p>
+        )}
+        {bookings.map((b) => {
+          const service = (b.services ?? null) as { name: string; icon: string | null } | null
+          const customer = customerById.get(b.user_id) ?? null
+          const isAssignable = b.status === 'requested' || b.status === 'confirmed'
+          const stats = offerStats.get(b.id)
+          return (
+            <div key={b.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ minWidth: 220 }}>
+                <strong className="card-heading">
+                  <ServiceIcon name={service?.icon} size={16} />
+                  {service?.name ?? 'Service'}
+                </strong>
+                <div className="muted" style={{ fontSize: 14 }}>
+                  {customer?.full_name ?? customer?.email ?? 'Unknown customer'}
+                </div>
+                <div className="muted" style={{ fontSize: 14 }}>
+                  {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
+                </div>
+                {stats && (
+                  <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                    Offers: {stats.offered} open · {stats.accepted} accepted · {stats.declined} declined
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+
+                <form action={setBookingStatus} style={{ display: 'flex', gap: 6 }}>
+                  <input type="hidden" name="bookingId" value={b.id} />
+                  <select name="status" defaultValue={b.status} style={{ width: 'auto' }}>
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn" type="submit">
+                    Save
+                  </button>
+                </form>
+
+                {isAssignable && (
+                  <form action={assignProvider} style={{ display: 'flex', gap: 6 }}>
+                    <input type="hidden" name="bookingId" value={b.id} />
+                    <select name="providerId" defaultValue={b.provider_id ?? ''} style={{ width: 'auto' }}>
+                      <option value="">Unassigned</option>
+                      {providers
+                        .filter((p) => p.id && eligibleByBooking.get(b.id)?.has(p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id ?? ''}>
+                            {p.business_name}
+                          </option>
+                        ))}
+                    </select>
+                    <button className="btn" type="submit">
+                      Assign
+                    </button>
+                  </form>
+                )}
+
+                {b.status === 'requested' && !b.provider_id && (
+                  <form action={redispatchOffers}>
+                    <input type="hidden" name="bookingId" value={b.id} />
+                    <button className="btn btn-ghost" type="submit" title="Create offers for newly matching providers">
+                      Redispatch
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
