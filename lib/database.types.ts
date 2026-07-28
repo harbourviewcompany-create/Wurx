@@ -798,6 +798,7 @@ export type Database = {
       cancel_booking: { Args: { p_booking_id: string }; Returns: undefined }
       claim_booking: { Args: { p_booking_id: string }; Returns: undefined }
       complete_booking: { Args: { p_booking_id: string }; Returns: undefined }
+      start_booking: { Args: { p_booking_id: string }; Returns: undefined }
       dispatch_booking_offers: { Args: { p_booking_id: string }; Returns: number }
       get_app_secret: { Args: { p_name: string }; Returns: string }
       provider_can_serve_booking: {
