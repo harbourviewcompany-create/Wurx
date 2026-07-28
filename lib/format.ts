@@ -42,6 +42,29 @@ export function formatDateTime(iso: string): string {
   }).format(new Date(iso))
 }
 
+/** Human window: "Tomorrow 9–11am". */
+export function formatWindow(startIso: string, endIso?: string | null): string {
+  const start = new Date(startIso)
+  const end = endIso ? new Date(endIso) : new Date(start.getTime() + 2 * 60 * 60 * 1000)
+  const day = new Intl.DateTimeFormat('en-CA', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Toronto',
+  }).format(start)
+  const t = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      hour: 'numeric',
+      minute: d.getMinutes() ? '2-digit' : undefined,
+      hour12: true,
+      timeZone: 'America/Toronto',
+    })
+      .format(d)
+      .replace(/\s/g, '')
+      .toLowerCase()
+  return `${day} · ${t(start)}–${t(end)}`
+}
+
 /**
  * Normalize a Canadian postal code toward "A1A 1A1".
  * Returns the original trimmed string if it is not a 6-char alnum pattern.
