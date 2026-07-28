@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes, mapsSearchUrl } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
+import { StartBookingButton } from '@/components/StartBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
 import { ReleaseBookingButton } from '@/components/ReleaseBookingButton'
 import { OfferRespondButtons } from '@/components/OfferRespondButtons'
@@ -142,13 +143,13 @@ export default async function ProviderDashboard() {
       </div>
       {provider.verification !== 'verified' ? (
         <p className="form-note" style={{ marginTop: 4 }}>
-          We&apos;re reviewing your application. Job offers will appear here
-          once you&apos;re verified.
+          We're reviewing your application. Job offers will appear here
+          once you're verified.
         </p>
       ) : (
         !provider.is_active && (
           <p className="form-note" style={{ marginTop: 4 }}>
-            Your profile is inactive, so it won&apos;t appear for new jobs.
+            Your profile is inactive, so it won't appear for new jobs.
             Contact support if this is unexpected.
           </p>
         )
@@ -295,6 +296,7 @@ export default async function ProviderDashboard() {
           )}
           {myBookings.map((b) => {
             const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            const canStart = b.status === 'confirmed'
             const completable = b.status === 'confirmed' || b.status === 'in_progress'
             const maps = mapsSearchUrl({
               address_line1: b.address_line1,
@@ -325,6 +327,7 @@ export default async function ProviderDashboard() {
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
+                  {canStart && <StartBookingButton bookingId={b.id} />}
                   {completable && <ReleaseBookingButton bookingId={b.id} />}
                   {completable && <CompleteBookingButton bookingId={b.id} />}
                 </div>
@@ -339,7 +342,7 @@ export default async function ProviderDashboard() {
         <div className="card">
           {reviews.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              No reviews yet. They&apos;ll show up here once customers rate a
+              No reviews yet. They'll show up here once customers rate a
               completed job.
             </p>
           )}
