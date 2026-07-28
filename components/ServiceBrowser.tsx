@@ -8,6 +8,7 @@ import {
   Check,
   Clock,
   MapPin,
+  Mic,
   Minus,
   Pencil,
   Plus,
@@ -33,22 +34,28 @@ export type BrowsableService = {
 
 type Filter = 'all' | 'quick' | 'licensed'
 
+/** Guaranteed 2-hour arrival windows (start hour local). */
+const WINDOWS: { hour: number; label: string }[] = [
+  { hour: 8, label: '8–10am' },
+  { hour: 10, label: '10am–12pm' },
+  { hour: 12, label: '12–2pm' },
+  { hour: 14, label: '2–4pm' },
+  { hour: 16, label: '4–6pm' },
+]
+
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'quick', label: 'Under 1 hour' },
   { key: 'licensed', label: 'Licensed pro' },
 ]
 
-/** Rank services for the current season so the first screen feels smart. */
 function seasonalRank(slug: string): number {
-  const month = new Date().getMonth() // 0=Jan … 7=Aug
-  // Late summer / early fall in Ottawa: outdoor + clean first, snow last.
+  const month = new Date().getMonth()
   if (month >= 3 && month <= 9) {
     const order = ['lawn-garden', 'lawn', 'home-cleaning', 'cleaning', 'handyman', 'snow-removal', 'snow']
     const i = order.findIndex((s) => slug.includes(s) || s.includes(slug))
     return i >= 0 ? i : 50
   }
-  // Winter: snow + clean + handyman.
   const winter = ['snow-removal', 'snow', 'home-cleaning', 'cleaning', 'handyman', 'lawn-garden', 'lawn']
   const i = winter.findIndex((s) => slug.includes(s) || s.includes(slug))
   return i >= 0 ? i : 50
@@ -58,33 +65,26 @@ function costOf(service: BrowsableService, minutes: number) {
   return serviceCostMinutes(minutes, service.credit_multiplier)
 }
 
-function preset(days: number, hour: number) {
+function dayOffsetLabel(days: number) {
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function windowStartIso(days: number, hour: number) {
   const d = new Date()
   d.setDate(d.getDate() + days)
   d.setHours(hour, 0, 0, 0)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return d.toISOString()
 }
 
-function presetLabel(days: number, hour: number) {
+function windowEndIso(days: number, hour: number) {
   const d = new Date()
   d.setDate(d.getDate() + days)
-  d.setHours(hour, 0, 0, 0)
-  const day =
-    days === 0
-      ? 'Today'
-      : days === 1
-        ? 'Tomorrow'
-        : d.toLocaleDateString('en-CA', { weekday: 'short' })
-  const time = d.toLocaleTimeString('en-CA', { hour: 'numeric', hour12: true }).replace(/\s/g, '')
-  return `${day} · ${time}`
-}
-
-/** Next Saturday (or this Saturday if still upcoming). */
-function daysUntilSaturday(): number {
-  const day = new Date().getDay() // 0 Sun … 6 Sat
-  const delta = (6 - day + 7) % 7
-  return delta === 0 ? 7 : delta
+  d.setHours(hour + 2, 0, 0, 0)
+  return d.toISOString()
 }
 
 function hasSavedAddress(defaults: {
@@ -118,13 +118,16 @@ export function ServiceBrowser({
   const searchRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const didAutoSelect = useRef(false)
+  const recognitionRef = useRef<{ stop: () => void } | null>(null)
 
   const [query, setQuery] = useState('')
+  const [listening, setListening] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<BrowsableService | null>(null)
 
   const [duration, setDuration] = useState(120)
-  const [start, setStart] = useState(() => preset(1, 9))
+  const [dayOffset, setDayOffset] = useState(1)
+  const [windowHour, setWindowHour] = useState(9)
   const [address, setAddress] = useState(defaults.address_line1)
   const [city, setCity] = useState(defaults.city)
   const [postal, setPostal] = useState(defaults.postal_code)
@@ -165,6 +168,36 @@ export function ServiceBrowser({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selected])
+
+  function startVoice() {
+    const SR =
+      typeof window !== 'undefined'
+        ? (window as unknown as {
+            SpeechRecognition?: new () => SpeechRecognition
+            webkitSpeechRecognition?: new () => SpeechRecognition
+          }).SpeechRecognition ||
+          (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition })
+            .webkitSpeechRecognition
+        : undefined
+    if (!SR) {
+      setError('Voice search needs Safari or Chrome on this device.')
+      return
+    }
+    const rec = new SR()
+    rec.lang = 'en-CA'
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    rec.onresult = (ev: SpeechRecognitionEvent) => {
+      const text = ev.results[0]?.[0]?.transcript ?? ''
+      if (text) setQuery(text)
+      setListening(false)
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend = () => setListening(false)
+    recognitionRef.current = rec
+    setListening(true)
+    rec.start()
+  }
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -210,20 +243,28 @@ export function ServiceBrowser({
     return Array.from(set).sort((a, b) => a - b)
   }, [selected])
 
+  const dayOptions = [0, 1, 2, 3].filter((d) => {
+    // keep at least one window in the future for this day
+    return WINDOWS.some((w) => new Date(windowStartIso(d, w.hour)).getTime() > Date.now() + 45 * 60 * 1000)
+  })
+
+  const availableWindows = WINDOWS.filter(
+    (w) => new Date(windowStartIso(dayOffset, w.hour)).getTime() > Date.now() + 45 * 60 * 1000,
+  )
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!selected) return
     setError(null)
 
-    if (!start) return setError('Pick a day and time so we know when to send a pro.')
-    if (new Date(start).getTime() < Date.now())
-      return setError('That time is in the past — pick a future slot.')
+    const startIso = windowStartIso(dayOffset, windowHour)
+    const endIso = windowEndIso(dayOffset, windowHour)
+    if (new Date(startIso).getTime() < Date.now())
+      return setError('That window is in the past — pick another.')
     if (!address.trim() || !city.trim() || !postal.trim())
       return setError('Add your address so the pro knows where to go.')
     if (!affordable)
-      return setError(
-        `You need about ${formatMinutes(shortfall)} more plan time for this job.`,
-      )
+      return setError(`You need about ${formatMinutes(shortfall)} more plan time for this job.`)
 
     const postalNorm = formatPostalCode(postal)
 
@@ -231,12 +272,13 @@ export function ServiceBrowser({
     const supabase = createClient()
     const { error: rpcError } = await supabase.rpc('request_booking', {
       p_service_id: selected.id,
-      p_scheduled_start: new Date(start).toISOString(),
+      p_scheduled_start: startIso,
       p_duration_minutes: duration,
       p_address_line1: address,
       p_city: city,
       p_postal_code: postalNorm,
       p_notes: notes,
+      p_window_end: endIso,
     })
 
     if (rpcError) {
@@ -264,19 +306,6 @@ export function ServiceBrowser({
   }
 
   if (selected) {
-    const sat = daysUntilSaturday()
-    const presets: [number, number][] = [
-      [0, 14], // today afternoon if still valid
-      [1, 9],
-      [1, 13],
-      [sat, 10],
-    ].filter(([d, h]) => {
-      const t = new Date()
-      t.setDate(t.getDate() + d)
-      t.setHours(h, 0, 0, 0)
-      return t.getTime() > Date.now() + 30 * 60 * 1000
-    }) as [number, number][]
-
     const savedSummary = [address, city, formatPostalCode(postal)].filter(Boolean).join(' · ')
 
     return (
@@ -300,32 +329,43 @@ export function ServiceBrowser({
         <form className="card booking-form" onSubmit={submit} style={{ marginTop: 16 }}>
           {error && <div className="form-error">{error}</div>}
 
-          <p className="tile-label">1 · When should we come?</p>
-          <div className="chip-row" style={{ marginBottom: 10 }}>
-            {presets.map(([d, h]) => {
-              const value = preset(d, h)
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  className={`chip${start === value ? ' chip-on' : ''}`}
-                  onClick={() => setStart(value)}
-                >
-                  {presetLabel(d, h)}
-                </button>
-              )
-            })}
+          <p className="tile-label">1 · Which day?</p>
+          <div className="chip-row" style={{ marginBottom: 12 }}>
+            {dayOptions.map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={`chip${dayOffset === d ? ' chip-on' : ''}`}
+                onClick={() => {
+                  setDayOffset(d)
+                  const first = WINDOWS.find(
+                    (w) =>
+                      new Date(windowStartIso(d, w.hour)).getTime() > Date.now() + 45 * 60 * 1000,
+                  )
+                  if (first) setWindowHour(first.hour)
+                }}
+              >
+                {dayOffsetLabel(d)}
+              </button>
+            ))}
           </div>
-          <label htmlFor="start" className="sr-label">
-            Or pick an exact date &amp; time
-          </label>
-          <input
-            id="start"
-            type="datetime-local"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            required
-          />
+
+          <p className="tile-label">Arrival window (guaranteed)</p>
+          <div className="chip-row" style={{ marginBottom: 8 }}>
+            {availableWindows.map((w) => (
+              <button
+                key={w.hour}
+                type="button"
+                className={`chip${windowHour === w.hour ? ' chip-on' : ''}`}
+                onClick={() => setWindowHour(w.hour)}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
+          <p className="muted" style={{ margin: '0 0 8px', fontSize: 13 }}>
+            A pro arrives sometime in this window — no exact minute to babysit.
+          </p>
 
           <p className="tile-label" style={{ marginTop: 22 }}>
             2 · How long do you need?
@@ -338,7 +378,9 @@ export function ServiceBrowser({
                 className={`chip${duration === m ? ' chip-on' : ''}`}
                 onClick={() => setDuration(m)}
               >
-                {m === selected.default_duration_minutes ? `Standard · ${formatMinutes(m)}` : formatMinutes(m)}
+                {m === selected.default_duration_minutes
+                  ? `Standard · ${formatMinutes(m)}`
+                  : formatMinutes(m)}
               </button>
             ))}
           </div>
@@ -413,7 +455,8 @@ export function ServiceBrowser({
                   />
                   {fsa.length === 3 && (
                     <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
-                      Matching Ottawa pros near <strong style={{ color: 'var(--text)' }}>{fsa}</strong>
+                      Matching Ottawa pros near{' '}
+                      <strong style={{ color: 'var(--text)' }}>{fsa}</strong>
                     </p>
                   )}
                 </div>
@@ -422,7 +465,13 @@ export function ServiceBrowser({
           )}
 
           <p className="tile-label" style={{ marginTop: 22 }}>
-            Anything the pro should know? <span className="muted" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>(optional)</span>
+            Anything the pro should know?{' '}
+            <span
+              className="muted"
+              style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}
+            >
+              (optional)
+            </span>
           </p>
           <textarea
             rows={2}
@@ -452,7 +501,7 @@ export function ServiceBrowser({
               <Check size={14} /> Cancel free anytime before the pro starts
             </li>
             <li>
-              <Check size={14} /> We’ll match a local pro and notify you
+              <Check size={14} /> We’ll text you when your pro is on the way
             </li>
           </ul>
 
@@ -461,7 +510,7 @@ export function ServiceBrowser({
               <button
                 className="btn btn-primary btn-lg"
                 type="submit"
-                disabled={loading || !affordable}
+                disabled={loading || !affordable || availableWindows.length === 0}
                 style={{ width: '100%', marginTop: 14 }}
               >
                 {loading ? 'Booking…' : 'Book this job'}
@@ -487,7 +536,7 @@ export function ServiceBrowser({
                 <button
                   className="btn btn-primary"
                   type="submit"
-                  disabled={loading || !affordable}
+                  disabled={loading || !affordable || availableWindows.length === 0}
                 >
                   {loading ? 'Booking…' : 'Book job'}
                 </button>
@@ -511,12 +560,21 @@ export function ServiceBrowser({
           ref={searchRef}
           type="search"
           className="search-input"
-          placeholder="Try “clean”, “lawn”, “snow”…"
+          placeholder="Describe the job — or try “lawn”…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search services"
           enterKeyHint="search"
         />
+        <button
+          type="button"
+          className={`search-mic${listening ? ' search-mic-on' : ''}`}
+          onClick={startVoice}
+          aria-label={listening ? 'Listening…' : 'Voice search'}
+          title="Voice search"
+        >
+          <Mic size={16} />
+        </button>
         {query && (
           <button
             type="button"
@@ -602,4 +660,19 @@ export function ServiceBrowser({
       )}
     </div>
   )
+}
+
+// Minimal SpeechRecognition typings for browsers that support it
+interface SpeechRecognition extends EventTarget {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  start: () => void
+  stop: () => void
+  onresult: ((ev: SpeechRecognitionEvent) => void) | null
+  onerror: ((ev: Event) => void) | null
+  onend: ((ev: Event) => void) | null
+}
+interface SpeechRecognitionEvent extends Event {
+  results: { [index: number]: { [index: number]: { transcript: string } } }
 }
