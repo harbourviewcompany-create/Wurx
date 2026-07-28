@@ -1,5 +1,13 @@
 -- Market-leading customer ops: arrival windows, completion photos, SMS queue,
 -- clearer "pro en route" notifications.
+--
+-- NOTE: the live notify_user() has `p_body text DEFAULT NULL`, and this
+-- migration's version below drops that default -- Postgres refuses a plain
+-- CREATE OR REPLACE that removes a parameter default (42P13), so the old
+-- signature must be dropped first. Not a change in intent, just what's
+-- needed to actually land the same function body.
+
+drop function if exists public.notify_user(uuid, text, text, text, uuid);
 
 -- Arrival window end (start remains scheduled_start). UI books 2h windows.
 alter table public.bookings
