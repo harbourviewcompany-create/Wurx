@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Clock, Minus, Plus, Search, ShieldCheck, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { formatMinutes } from '@/lib/format'
+import { formatMinutes, formatPostalCode, postalFsa } from '@/lib/format'
 import { affordability, serviceCostMinutes } from '@/lib/booking'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
@@ -28,12 +28,10 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'licensed', label: 'Licensed pro' },
 ]
 
-/** Cost in plan minutes for a given service + duration. */
 function costOf(service: BrowsableService, minutes: number) {
   return serviceCostMinutes(minutes, service.credit_multiplier)
 }
 
-/** Next occurrence of a given hour, `days` from now, as a datetime-local value. */
 function preset(days: number, hour: number) {
   const d = new Date()
   d.setDate(d.getDate() + days)
@@ -64,7 +62,6 @@ export function ServiceBrowser({
   availableMinutes: number
   canBook: boolean
   defaults: { address_line1: string; city: string; postal_code: string }
-  /** Deep-link from dashboard “Book again” / first-job hints. */
   initialServiceSlug?: string | null
   initialDurationMinutes?: number
 }) {
@@ -77,7 +74,6 @@ export function ServiceBrowser({
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<BrowsableService | null>(null)
 
-  // Booking state — default first time chip to tomorrow 9am for less friction
   const [duration, setDuration] = useState(120)
   const [start, setStart] = useState(() => preset(1, 9))
   const [address, setAddress] = useState(defaults.address_line1)
@@ -87,7 +83,6 @@ export function ServiceBrowser({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Book-again / first-job deep link: open the right service once.
   useEffect(() => {
     if (didAutoSelect.current || !initialServiceSlug) return
     const match = services.find((s) => s.slug === initialServiceSlug)
@@ -105,7 +100,6 @@ export function ServiceBrowser({
     )
   }, [initialServiceSlug, initialDurationMinutes, services])
 
-  // "/" focuses search — a small power-user touch that costs nothing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (
@@ -143,8 +137,14 @@ export function ServiceBrowser({
     requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
+  function onPostalBlur() {
+    const formatted = formatPostalCode(postal)
+    if (formatted !== postal) setPostal(formatted)
+  }
+
   const cost = selected ? costOf(selected, duration) : 0
   const { affordable, shortfall, remaining } = affordability(cost, availableMinutes)
+  const fsa = postalFsa(postal)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -155,6 +155,8 @@ export function ServiceBrowser({
     if (new Date(start).getTime() < Date.now()) return setError('Please choose a time in the future.')
     if (!affordable) return setError(`That booking needs ${formatMinutes(shortfall)} more than you have.`)
 
+    const postalNorm = formatPostalCode(postal)
+
     setLoading(true)
     const supabase = createClient()
     const { error: rpcError } = await supabase.rpc('request_booking', {
@@ -163,7 +165,7 @@ export function ServiceBrowser({
       p_duration_minutes: duration,
       p_address_line1: address,
       p_city: city,
-      p_postal_code: postal,
+      p_postal_code: postalNorm,
       p_notes: notes,
     })
 
@@ -173,17 +175,16 @@ export function ServiceBrowser({
       return
     }
 
-    // Best-effort: remember address for the next booking (profile is source of prefill).
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (user && (address.trim() || city.trim() || postal.trim())) {
+    if (user && (address.trim() || city.trim() || postalNorm.trim())) {
       await supabase
         .from('profiles')
         .update({
           address_line1: address.trim() || null,
           city: city.trim() || null,
-          postal_code: postal.trim() || null,
+          postal_code: postalNorm.trim() || null,
         })
         .eq('id', user.id)
     }
@@ -192,7 +193,6 @@ export function ServiceBrowser({
     router.refresh()
   }
 
-  // ---------------------------------------------------------------- booking
   if (selected) {
     const presets: [number, number][] = [
       [1, 9],
@@ -218,7 +218,7 @@ export function ServiceBrowser({
           </div>
         </div>
 
-        <form className="card" onSubmit={submit} style={{ marginTop: 16 }}>
+        <form className="card booking-form" onSubmit={submit} style={{ marginTop: 16 }}>
           {error && <div className="form-error">{error}</div>}
 
           <p className="tile-label">When should we come?</p>
@@ -283,6 +283,7 @@ export function ServiceBrowser({
             onChange={(e) => setAddress(e.target.value)}
             placeholder="Street address"
             aria-label="Street address"
+            autoComplete="street-address"
           />
           <div className="grid grid-2" style={{ gap: 12, marginTop: 10 }}>
             <input
@@ -291,14 +292,25 @@ export function ServiceBrowser({
               onChange={(e) => setCity(e.target.value)}
               placeholder="City"
               aria-label="City"
+              autoComplete="address-level2"
             />
-            <input
-              type="text"
-              value={postal}
-              onChange={(e) => setPostal(e.target.value)}
-              placeholder="Postal code"
-              aria-label="Postal code"
-            />
+            <div>
+              <input
+                type="text"
+                value={postal}
+                onChange={(e) => setPostal(e.target.value)}
+                onBlur={onPostalBlur}
+                placeholder="Postal code (K1A 0B1)"
+                aria-label="Postal code"
+                autoComplete="postal-code"
+                inputMode="text"
+              />
+              {fsa.length === 3 && (
+                <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
+                  Matching pros in <strong style={{ color: 'var(--text)' }}>{fsa}</strong>
+                </p>
+              )}
+            </div>
           </div>
 
           <p className="tile-label" style={{ marginTop: 22 }}>
@@ -329,30 +341,55 @@ export function ServiceBrowser({
             Cancel anytime before then to release the hold.
           </p>
 
-          {canBook ? (
-            <button
-              className="btn btn-primary btn-lg"
-              type="submit"
-              disabled={loading || !affordable}
-              style={{ width: '100%', marginTop: 14 }}
-            >
-              {loading ? 'Booking…' : 'Confirm booking'}
-            </button>
-          ) : (
-            <Link
-              href="/pricing"
-              className="btn btn-primary btn-lg"
-              style={{ width: '100%', marginTop: 14 }}
-            >
-              Choose a plan to book
-            </Link>
-          )}
+          {/* Desktop / inline confirm */}
+          <div className="booking-confirm-inline">
+            {canBook ? (
+              <button
+                className="btn btn-primary btn-lg"
+                type="submit"
+                disabled={loading || !affordable}
+                style={{ width: '100%', marginTop: 14 }}
+              >
+                {loading ? 'Booking…' : 'Confirm booking'}
+              </button>
+            ) : (
+              <Link
+                href="/pricing"
+                className="btn btn-primary btn-lg"
+                style={{ width: '100%', marginTop: 14 }}
+              >
+                Choose a plan to book
+              </Link>
+            )}
+          </div>
+
+          {/* Mobile sticky confirm — always thumb-reachable */}
+          <div className="booking-sticky" aria-hidden={false}>
+            <div className="booking-sticky-inner">
+              <div className="booking-sticky-cost">
+                <span className="muted">Uses</span>
+                <strong className={affordable ? '' : 'over'}>{formatMinutes(cost)}</strong>
+              </div>
+              {canBook ? (
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={loading || !affordable}
+                >
+                  {loading ? 'Booking…' : 'Confirm'}
+                </button>
+              ) : (
+                <Link href="/pricing" className="btn btn-primary">
+                  Get a plan
+                </Link>
+              )}
+            </div>
+          </div>
         </form>
       </div>
     )
   }
 
-  // ---------------------------------------------------------------- catalog
   return (
     <div>
       <div className="search-wrap">

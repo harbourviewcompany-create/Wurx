@@ -485,10 +485,6 @@ textarea:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(193, 68, 14, 0.18);
 }
-/* Checkboxes (service pickers, day-of-week toggles). Without this they fall
-   under the generic input rule above -- width:100% and text padding on a
-   checkbox produces an oversized, blank, native-rendered box with no visible
-   checked state. */
 input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
@@ -670,10 +666,6 @@ footer.site-footer {
   margin-top: 56px;
 }
 
-/* ============================================================
-   v2 — depth, motion, activation, and the minutes fuel gauge
-   ============================================================ */
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -701,7 +693,6 @@ footer.site-footer {
   }
 }
 
-/* Trust row — quiet reassurance, not clutter */
 .trust-row {
   display: flex;
   flex-wrap: wrap;
@@ -720,7 +711,6 @@ footer.site-footer {
   color: var(--good);
 }
 
-/* Activation state (dashboard with no plan): one screen, one action */
 .activate {
   max-width: 640px;
   margin: 8px auto 0;
@@ -740,7 +730,6 @@ footer.site-footer {
   margin: 0 auto 28px;
 }
 
-/* Stepper — goal-gradient: three tidy steps toward "done" */
 .stepper {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -785,7 +774,6 @@ footer.site-footer {
   }
 }
 
-/* Dashboard hero: the minutes balance as the centrepiece */
 .dash-hero {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -844,7 +832,6 @@ footer.site-footer {
   margin: 0 0 16px;
 }
 
-/* Info tiles under the hero */
 .tile-label {
   font-size: 12px;
   text-transform: uppercase;
@@ -854,7 +841,6 @@ footer.site-footer {
   font-weight: 600;
 }
 
-/* Bigger tap targets on touch */
 @media (max-width: 640px) {
   .btn {
     padding: 13px 18px;
@@ -863,10 +849,6 @@ footer.site-footer {
     padding: 16px 24px;
   }
 }
-
-/* ============================================================
-   Service discovery — search, catalog, and the booking flow
-   ============================================================ */
 
 .sr-label {
   position: absolute;
@@ -880,7 +862,6 @@ footer.site-footer {
   border: 0;
 }
 
-/* Search */
 .search-wrap {
   position: relative;
   display: flex;
@@ -921,7 +902,6 @@ footer.site-footer {
   color: var(--text);
 }
 
-/* Filter chips */
 .chip-row {
   display: flex;
   gap: 8px;
@@ -948,7 +928,6 @@ footer.site-footer {
   border-color: rgba(193, 68, 14, 0.55);
 }
 
-/* Service catalog */
 .service-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -1034,11 +1013,9 @@ footer.site-footer {
   padding: 32px 24px;
 }
 
-/* Booking flow */
 .booking-panel {
   max-width: 640px;
   margin: 0 auto;
-  /* clear the sticky header when scrolled into view */
   scroll-margin-top: 84px;
 }
 .back-link {
@@ -1069,7 +1046,6 @@ footer.site-footer {
   border-radius: 6px;
 }
 
-/* Duration stepper */
 .stepper-row {
   display: flex;
   align-items: center;
@@ -1110,7 +1086,6 @@ footer.site-footer {
   font-size: 13px;
 }
 
-/* Cost summary */
 .cost-summary {
   display: flex;
   align-items: center;
@@ -1165,7 +1140,6 @@ footer.site-footer {
   color: var(--text);
 }
 
-/* Notifications */
 .notif-row {
   align-items: flex-start;
   gap: 14px;
@@ -1182,10 +1156,6 @@ footer.site-footer {
 .card-heading .tag {
   margin-left: 8px;
 }
-
-/* ============================================================
-   R2 — loading skeletons (light Option A theme)
-   ============================================================ */
 
 @keyframes shimmer {
   from {
@@ -1225,4 +1195,84 @@ footer.site-footer {
   .skeleton {
     animation: none;
   }
+}
+
+/* Sticky book confirm (mobile) + denser provider offers */
+.booking-form {
+  padding-bottom: 24px;
+}
+.booking-sticky {
+  display: none;
+}
+@media (max-width: 640px) {
+  .booking-form {
+    padding-bottom: 96px;
+  }
+  .booking-confirm-inline {
+    display: none;
+  }
+  .booking-sticky {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: rgba(251, 250, 247, 0.94);
+    border-top: 1px solid var(--border);
+    backdrop-filter: saturate(140%) blur(10px);
+  }
+  .booking-sticky-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .booking-sticky-cost {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .booking-sticky-cost strong {
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .booking-sticky-cost strong.over {
+    color: var(--warn);
+  }
+  .booking-sticky .btn {
+    flex-shrink: 0;
+    min-width: 120px;
+  }
+}
+
+.offer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.offer-card:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.offer-card:first-child {
+  padding-top: 0;
+}
+.offer-card-main {
+  min-width: 0;
+}
+.offer-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.offer-actions .btn {
+  flex: 1;
+  min-height: 48px;
 }

@@ -4,7 +4,13 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-export function OfferRespondButtons({ offerId }: { offerId: string }) {
+export function OfferRespondButtons({
+  offerId,
+  fullWidth = false,
+}: {
+  offerId: string
+  fullWidth?: boolean
+}) {
   const router = useRouter()
   const [loading, setLoading] = useState<'accept' | 'decline' | null>(null)
 
@@ -24,18 +30,23 @@ export function OfferRespondButtons({ offerId }: { offerId: string }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8 }}>
+    <div
+      className={fullWidth ? 'offer-actions' : undefined}
+      style={fullWidth ? undefined : { display: 'flex', gap: 8 }}
+    >
       <button
         className="btn btn-primary"
         onClick={() => respond(true)}
         disabled={loading !== null}
+        style={fullWidth ? { flex: 1 } : undefined}
       >
-        {loading === 'accept' ? '…' : 'Accept'}
+        {loading === 'accept' ? '…' : 'Accept job'}
       </button>
       <button
         className="btn btn-ghost"
         onClick={() => respond(false)}
         disabled={loading !== null}
+        style={fullWidth ? { flex: 1 } : undefined}
       >
         {loading === 'decline' ? '…' : 'Decline'}
       </button>

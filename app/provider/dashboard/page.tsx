@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatDateTime, formatMinutes } from '@/lib/format'
+import { formatDateTime, formatMinutes, mapsSearchUrl } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
@@ -46,7 +47,7 @@ export default async function ProviderDashboard() {
     supabase
       .from('job_offers')
       .select(
-        'id, expires_at, offered_at, booking_id, bookings(id, scheduled_start, duration_minutes, city, postal_code, status, provider_id, services(name, icon))',
+        'id, expires_at, offered_at, booking_id, bookings(id, scheduled_start, duration_minutes, address_line1, city, postal_code, notes, status, provider_id, services(name, icon))',
       )
       .eq('provider_id', provider.id)
       .eq('status', 'offered')
@@ -55,14 +56,18 @@ export default async function ProviderDashboard() {
       .limit(30),
     supabase
       .from('bookings')
-      .select('id, scheduled_start, duration_minutes, city, postal_code, services(name, icon)')
+      .select(
+        'id, scheduled_start, duration_minutes, address_line1, city, postal_code, notes, services(name, icon)',
+      )
       .eq('status', 'requested')
       .is('provider_id', null)
       .order('scheduled_start', { ascending: true })
       .limit(30),
     supabase
       .from('bookings')
-      .select('id, status, scheduled_start, duration_minutes, city, services(name, icon)')
+      .select(
+        'id, status, scheduled_start, duration_minutes, address_line1, city, postal_code, services(name, icon)',
+      )
       .eq('provider_id', provider.id)
       .order('scheduled_start', { ascending: false })
       .limit(20),
@@ -96,8 +101,10 @@ export default async function ProviderDashboard() {
     id: string
     scheduled_start: string
     duration_minutes: number
+    address_line1?: string | null
     city: string | null
     postal_code?: string | null
+    notes?: string | null
     status?: string
     provider_id?: string | null
     services: { name: string; icon: string | null } | null
@@ -115,7 +122,6 @@ export default async function ProviderDashboard() {
     .filter((o) => o.booking && o.booking.status === 'requested' && !o.booking.provider_id)
 
   const offeredBookingIds = new Set(offers.map((o) => o.booking!.id))
-  // Open pool excludes jobs already offered to this provider (those live in Offers).
   const openJobs = (openRes.data ?? []).filter((b) => !offeredBookingIds.has(b.id))
   const myBookings = myBookingsRes.data ?? []
   const reviews = reviewsRes.data ?? []
@@ -136,13 +142,13 @@ export default async function ProviderDashboard() {
       </div>
       {provider.verification !== 'verified' ? (
         <p className="form-note" style={{ marginTop: 4 }}>
-          We're reviewing your application. Job offers will appear here
-          once you're verified.
+          We&apos;re reviewing your application. Job offers will appear here
+          once you&apos;re verified.
         </p>
       ) : (
         !provider.is_active && (
           <p className="form-note" style={{ marginTop: 4 }}>
-            Your profile is inactive, so it won't appear for new jobs.
+            Your profile is inactive, so it won&apos;t appear for new jobs.
             Contact support if this is unexpected.
           </p>
         )
@@ -176,22 +182,52 @@ export default async function ProviderDashboard() {
             const b = o.booking!
             const service = b.services
             const left = minutesLeft(o.expires_at)
+            const maps = mapsSearchUrl({
+              address_line1: b.address_line1,
+              city: b.city,
+              postal_code: b.postal_code,
+            })
+            const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
             return (
-              <div key={o.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ flex: 1, minWidth: 200 }}>
+              <div key={o.id} className="offer-card">
+                <div className="offer-card-main">
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
                     {service?.name ?? 'Service'}
                   </strong>
-                  <div className="muted" style={{ fontSize: 14 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-                    {b.city ? ` · ${b.city}` : ''}
+                  <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)} on site
                   </div>
-                  <div className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 6 }}>
-                    {left <= 0 ? 'Expiring…' : `${left} min left`}
+                  {where && (
+                    <div className="muted" style={{ fontSize: 14, marginTop: 6 }}>
+                      <MapPin size={14} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+                      {where}
+                      {maps && (
+                        <>
+                          {' · '}
+                          <a
+                            href={maps}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'var(--brand)', fontWeight: 600 }}
+                          >
+                            Open map
+                          </a>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {b.notes?.trim() && (
+                    <p style={{ margin: '8px 0 0', fontSize: 14 }}>
+                      <span className="muted">Notes: </span>
+                      {b.notes.trim()}
+                    </p>
+                  )}
+                  <div className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 10 }}>
+                    {left <= 0 ? 'Expiring…' : `${left} min left to accept`}
                   </div>
                 </div>
-                <OfferRespondButtons offerId={o.id} />
+                <OfferRespondButtons offerId={o.id} fullWidth />
               </div>
             )
           })}
@@ -208,17 +244,38 @@ export default async function ProviderDashboard() {
           <div className="card">
             {openJobs.map((b) => {
               const service = (b.services ?? null) as { name: string; icon: string | null } | null
+              const maps = mapsSearchUrl({
+                address_line1: b.address_line1,
+                city: b.city,
+                postal_code: b.postal_code,
+              })
+              const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
               return (
-                <div key={b.id} className="list-row">
-                  <div>
+                <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
                     <strong className="card-heading">
                       <ServiceIcon name={service?.icon} size={16} />
                       {service?.name ?? 'Service'}
                     </strong>
                     <div className="muted" style={{ fontSize: 14 }}>
                       {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-                      {b.city ? ` · ${b.city}` : ''}
+                      {where ? ` · ${where}` : ''}
                     </div>
+                    {maps && (
+                      <a
+                        href={maps}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--brand)', fontSize: 13, fontWeight: 600 }}
+                      >
+                        Open map
+                      </a>
+                    )}
+                    {b.notes?.trim() && (
+                      <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
+                        {b.notes.trim()}
+                      </p>
+                    )}
                   </div>
                   <ClaimBookingButton bookingId={b.id} />
                 </div>
@@ -239,8 +296,13 @@ export default async function ProviderDashboard() {
           {myBookings.map((b) => {
             const service = (b.services ?? null) as { name: string; icon: string | null } | null
             const completable = b.status === 'confirmed' || b.status === 'in_progress'
+            const maps = mapsSearchUrl({
+              address_line1: b.address_line1,
+              city: b.city,
+              postal_code: b.postal_code,
+            })
             return (
-              <div key={b.id} className="list-row">
+              <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
@@ -250,8 +312,18 @@ export default async function ProviderDashboard() {
                     {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
                     {b.city ? ` · ${b.city}` : ''}
                   </div>
+                  {maps && completable && (
+                    <a
+                      href={maps}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--brand)', fontSize: 13, fontWeight: 600 }}
+                    >
+                      Open map
+                    </a>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
                   {completable && <ReleaseBookingButton bookingId={b.id} />}
                   {completable && <CompleteBookingButton bookingId={b.id} />}
@@ -267,7 +339,7 @@ export default async function ProviderDashboard() {
         <div className="card">
           {reviews.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              No reviews yet. They'll show up here once customers rate a
+              No reviews yet. They&apos;ll show up here once customers rate a
               completed job.
             </p>
           )}
