@@ -5,6 +5,7 @@ import { formatDateTime, formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ClaimBookingButton } from '@/components/ClaimBookingButton'
 import { CompleteBookingButton } from '@/components/CompleteBookingButton'
+import { ReleaseBookingButton } from '@/components/ReleaseBookingButton'
 import { OfferRespondButtons } from '@/components/OfferRespondButtons'
 import { PayoutsCard } from '@/components/PayoutsCard'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
@@ -253,6 +254,7 @@ export default async function ProviderDashboard() {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
                   {completable && <CompleteBookingButton bookingId={b.id} />}
+                  {completable && <ReleaseBookingButton bookingId={b.id} />}
                 </div>
               </div>
             )
