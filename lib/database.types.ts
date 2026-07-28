@@ -27,6 +27,7 @@ export type Database = {
           status: Database["public"]["Enums"]["booking_status"]
           updated_at: string
           user_id: string
+          window_end: string | null
         }
         Insert: {
           address_line1?: string | null
@@ -42,6 +43,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
           user_id: string
+          window_end?: string | null
         }
         Update: {
           address_line1?: string | null
@@ -57,6 +59,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
           user_id?: string
+          window_end?: string | null
         }
         Relationships: [
           { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
@@ -65,6 +68,36 @@ export type Database = {
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "available_balances"; referencedColumns: ["user_id"] },
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "hour_balances"; referencedColumns: ["user_id"] },
           { foreignKeyName: "bookings_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      booking_photos: {
+        Row: {
+          id: string
+          booking_id: string
+          uploaded_by: string
+          storage_path: string
+          caption: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          booking_id: string
+          uploaded_by: string
+          storage_path: string
+          caption?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          booking_id?: string
+          uploaded_by?: string
+          storage_path?: string
+          caption?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "booking_photos_booking_id_fkey"; columns: ["booking_id"]; isOneToOne: false; referencedRelation: "bookings"; referencedColumns: ["id"] },
+          { foreignKeyName: "booking_photos_uploaded_by_fkey"; columns: ["uploaded_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       hour_holds: {
@@ -609,6 +642,8 @@ export type Database = {
           read_at: string | null
           email_pending: boolean
           emailed_at: string | null
+          sms_pending: boolean
+          sms_sent_at: string | null
           created_at: string
         }
         Insert: {
@@ -617,9 +652,16 @@ export type Database = {
           title: string
           body?: string | null
           booking_id?: string | null
+          email_pending?: boolean
+          sms_pending?: boolean
+          sms_sent_at?: string | null
         }
         Update: {
           read_at?: string | null
+          email_pending?: boolean
+          emailed_at?: string | null
+          sms_pending?: boolean
+          sms_sent_at?: string | null
         }
         Relationships: []
       }
@@ -815,6 +857,7 @@ export type Database = {
           p_postal_code: string
           p_scheduled_start: string
           p_service_id: string
+          p_window_end?: string
         }
         Returns: string
       }
