@@ -1,15 +1,11 @@
-// Drains the notification email queue (verify_jwt = false — invoked by a
-// schedule, authenticated by a shared secret in Vault).
-//
-// Notifications are written by database triggers with email_pending = true.
-// This sends each one via Resend and marks it delivered. If no RESEND_API_KEY
-// is present in Vault the function no-ops gracefully, so in-app notifications
-// keep working and email can be switched on later by adding the key alone.
+// Drains notification email + optional SMS queues.
+// Email: Resend (RESEND_API_KEY). SMS: Twilio (TWILIO_ACCOUNT_SID,
+// TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER). Missing keys → drain flags, no-op.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
 function json(body: unknown, status = 200) {
@@ -28,8 +24,6 @@ async function secret(name: string): Promise<string | null> {
 const BATCH = 50
 
 Deno.serve(async (req: Request) => {
-  // Shared-secret auth: this endpoint runs without JWT verification so a
-  // scheduler can call it, so it must not be openly invokable.
   const expected = await secret('NOTIFY_DISPATCH_SECRET')
   if (expected) {
     const provided = req.headers.get('X-Dispatch-Secret')
@@ -38,7 +32,12 @@ Deno.serve(async (req: Request) => {
 
   const apiKey = await secret('RESEND_API_KEY')
   const from = (await secret('NOTIFY_FROM_EMAIL')) ?? 'Wurx <notifications@wurx.ca>'
+  const twilioSid = await secret('TWILIO_ACCOUNT_SID')
+  const twilioToken = await secret('TWILIO_AUTH_TOKEN')
+  const twilioFrom = await secret('TWILIO_FROM_NUMBER')
+  const twilioReady = !!(twilioSid && twilioToken && twilioFrom)
 
+  // ---- Email queue ----
   const { data: pending, error } = await supabase
     .from('notifications')
     .select('id, user_id, kind, title, body')
@@ -47,65 +46,131 @@ Deno.serve(async (req: Request) => {
     .limit(BATCH)
 
   if (error) return json({ error: error.message }, 500)
-  if (!pending?.length) return json({ sent: 0, skipped: 0 })
 
-  // Without an email provider configured, drain the queue flag so it doesn't
-  // grow unbounded — the in-app notification remains the source of truth.
-  if (!apiKey) {
-    await supabase
-      .from('notifications')
-      .update({ email_pending: false })
-      .in('id', pending.map((n) => n.id))
-    return json({ sent: 0, skipped: pending.length, reason: 'RESEND_API_KEY not set' })
-  }
+  let emailSent = 0
+  let emailSkipped = 0
 
-  const userIds = [...new Set(pending.map((n) => n.user_id))]
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, email, full_name')
-    .in('id', userIds)
-  const emailOf = new Map((profiles ?? []).map((p) => [p.id, p.email]))
-
-  let sent = 0
-  let skipped = 0
-
-  for (const n of pending) {
-    const to = emailOf.get(n.user_id)
-    if (!to) {
-      skipped++
-      await supabase.from('notifications').update({ email_pending: false }).eq('id', n.id)
-      continue
-    }
-
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to,
-          subject: n.title,
-          text: `${n.title}\n\n${n.body ?? ''}\n\nManage your bookings: https://wurx.vercel.app/dashboard`,
-        }),
-      })
-
-      if (!res.ok) {
-        console.error('Resend failed', n.id, res.status, await res.text())
-        continue // leave pending so the next run retries
-      }
-
+  if (pending?.length) {
+    if (!apiKey) {
       await supabase
         .from('notifications')
-        .update({ email_pending: false, emailed_at: new Date().toISOString() })
-        .eq('id', n.id)
-      sent++
-    } catch (err) {
-      console.error('Send error', n.id, err)
+        .update({ email_pending: false })
+        .in('id', pending.map((n) => n.id))
+      emailSkipped = pending.length
+    } else {
+      const userIds = [...new Set(pending.map((n) => n.user_id))]
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', userIds)
+      const emailOf = new Map((profiles ?? []).map((p) => [p.id, p.email]))
+
+      for (const n of pending) {
+        const to = emailOf.get(n.user_id)
+        if (!to) {
+          emailSkipped++
+          await supabase.from('notifications').update({ email_pending: false }).eq('id', n.id)
+          continue
+        }
+        try {
+          const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from,
+              to,
+              subject: n.title,
+              text: `${n.title}\n\n${n.body ?? ''}\n\nhttps://wurx.vercel.app/dashboard`,
+            }),
+          })
+          if (!res.ok) {
+            console.error('Resend failed', n.id, res.status, await res.text())
+            continue
+          }
+          await supabase
+            .from('notifications')
+            .update({ email_pending: false, emailed_at: new Date().toISOString() })
+            .eq('id', n.id)
+          emailSent++
+        } catch (err) {
+          console.error('Send error', n.id, err)
+        }
+      }
     }
   }
 
-  return json({ sent, skipped })
+  // ---- SMS queue (status that matter off-app: en route, confirmed, done) ----
+  const { data: smsPending } = await supabase
+    .from('notifications')
+    .select('id, user_id, title, body')
+    .eq('sms_pending', true)
+    .order('created_at', { ascending: true })
+    .limit(BATCH)
+
+  let smsSent = 0
+  let smsSkipped = 0
+
+  if (smsPending?.length) {
+    if (!twilioReady) {
+      await supabase
+        .from('notifications')
+        .update({ sms_pending: false })
+        .in('id', smsPending.map((n) => n.id))
+      smsSkipped = smsPending.length
+    } else {
+      const userIds = [...new Set(smsPending.map((n) => n.user_id))]
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, phone')
+        .in('id', userIds)
+      const phoneOf = new Map((profiles ?? []).map((p) => [p.id, p.phone]))
+
+      for (const n of smsPending) {
+        const to = (phoneOf.get(n.user_id) ?? '').replace(/[^\d+]/g, '')
+        if (!to || to.length < 10) {
+          smsSkipped++
+          await supabase.from('notifications').update({ sms_pending: false }).eq('id', n.id)
+          continue
+        }
+        const e164 = to.startsWith('+') ? to : `+1${to.replace(/^1/, '')}`
+        try {
+          const body = new URLSearchParams({
+            To: e164,
+            From: twilioFrom!,
+            Body: `Wurx: ${n.title}${n.body ? ` — ${n.body}` : ''}`.slice(0, 320),
+          })
+          const res = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: 'Basic ' + btoa(`${twilioSid}:${twilioToken}`),
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body,
+            },
+          )
+          if (!res.ok) {
+            console.error('Twilio failed', n.id, res.status, await res.text())
+            continue
+          }
+          await supabase
+            .from('notifications')
+            .update({ sms_pending: false, sms_sent_at: new Date().toISOString() })
+            .eq('id', n.id)
+          smsSent++
+        } catch (err) {
+          console.error('SMS error', n.id, err)
+        }
+      }
+    }
+  }
+
+  return json({
+    email: { sent: emailSent, skipped: emailSkipped },
+    sms: { sent: smsSent, skipped: smsSkipped, configured: twilioReady },
+  })
 })
