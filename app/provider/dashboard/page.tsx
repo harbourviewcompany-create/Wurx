@@ -253,8 +253,8 @@ export default async function ProviderDashboard() {
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
-                  {completable && <CompleteBookingButton bookingId={b.id} />}
                   {completable && <ReleaseBookingButton bookingId={b.id} />}
+                  {completable && <CompleteBookingButton bookingId={b.id} />}
                 </div>
               </div>
             )
