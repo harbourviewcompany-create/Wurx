@@ -9,6 +9,7 @@ import { ReviewForm } from '@/components/ReviewForm'
 import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
 import { MinutesArriving } from '@/components/MinutesArriving'
+import { LowBalanceNudge } from '@/components/LowBalanceNudge'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
 const STATUS_LABEL: Record<string, string> = {
   requested: 'Finding a pro…',
   confirmed: 'Scheduled',
-  in_progress: 'In progress',
+  in_progress: 'Pro on the job',
   completed: 'Done',
   cancelled: 'Cancelled',
 }
@@ -30,7 +31,6 @@ const STATUS_TAG: Record<string, string> = {
   cancelled: 'tag bad',
 }
 
-/** Seasonal first-job suggestions (Ottawa). */
 const FIRST_JOB_HINTS: { slug: string; label: string; blurb: string }[] = [
   { slug: 'cleaning', label: 'Home cleaning', blurb: 'Most popular first booking' },
   { slug: 'snow-removal', label: 'Snow removal', blurb: 'Seasonal — book early' },
@@ -106,10 +106,8 @@ export default async function Dashboard({
   const firstName = profile?.full_name?.split(' ')[0]
   const activeSlugs = new Set((servicesRes.data ?? []).map((s) => s.slug))
 
-  // F3: paid, but grant not visible yet — never show the “choose a plan” wall.
   const awaitingMinutes = justPaid && available <= 0
 
-  // ---- Activation: no plan yet (and not mid-webhook) → one screen ----
   if (!hasActiveSub && !awaitingMinutes) {
     return (
       <section className="container section">
@@ -128,7 +126,7 @@ export default async function Dashboard({
               <span className="step-num">1</span>
               <div>
                 <b>Choose a plan</b>
-                <small>A monthly bank of service time.</small>
+                <small>Sized to how often you need help.</small>
               </div>
             </div>
             <div className="step">
@@ -176,7 +174,6 @@ export default async function Dashboard({
     )
   }
 
-  // ---- Active plan (or post-checkout lag) ----
   const monthly = plan?.monthly_minutes ?? 0
   const frac =
     monthly > 0
@@ -286,6 +283,10 @@ export default async function Dashboard({
           )}
         </div>
       </div>
+
+      {!awaitingMinutes && (
+        <LowBalanceNudge availableMinutes={available} monthlyMinutes={monthly} />
+      )}
 
       {showFirstJobGuide && (
         <div className="card rise" style={{ marginTop: 18 }}>

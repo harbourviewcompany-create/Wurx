@@ -30,11 +30,10 @@ const DEFAULT_FEATURES = [
   'Cancel anytime',
 ]
 
-/** One concrete job example per plan slug (F2). */
 const PLAN_EXAMPLES: Record<string, string> = {
-  starter: 'e.g. one deep clean or a few snow clears',
-  home: 'e.g. bi-weekly clean + lawn in season',
-  plus: 'e.g. weekly clean + handyman + outdoor care',
+  starter: 'About 1 deep clean or a few snow clears a month',
+  home: 'About 2–3 cleans a month, or clean + lawn in season',
+  plus: 'Weekly clean + outdoor care + handyman buffer',
 }
 
 export default async function PricingPage({
@@ -56,7 +55,6 @@ export default async function PricingPage({
 
   const user = userData.user
   const list = plans ?? []
-  // Prefer deep-linked plan, else "home", else middle.
   const featuredIndex = (() => {
     if (planQuery) {
       const i = list.findIndex((p) => p.slug === planQuery)
@@ -75,9 +73,8 @@ export default async function PricingPage({
           One plan. <span className="gradient-text">Your whole home.</span>
         </h1>
         <p>
-          Every plan is a monthly bank of service minutes. Different services
-          spend minutes at different rates — a quick job costs less than a
-          specialised one.
+          Choose how much help you need each month — cleans, snow, lawn, handyman.
+          Book real jobs; we meter them in service time so every visit is fair.
         </p>
       </div>
 
@@ -102,19 +99,16 @@ export default async function PricingPage({
                 <b>{formatPrice(p.price_cents)}</b>
                 <small>/ month</small>
               </div>
-              <p className="muted" style={{ margin: '2px 0 0' }}>
-                {p.description ?? `${formatMinutes(p.monthly_minutes)} of service time`}
-              </p>
-              {rate && (
-                <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
-                  {rate}
-                </p>
-              )}
               {example && (
-                <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                <p style={{ margin: '8px 0 0', fontWeight: 600, fontSize: 15 }}>
                   {example}
                 </p>
               )}
+              <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                {p.description ??
+                  `Includes ${formatMinutes(p.monthly_minutes)} of service time`}
+                {rate ? ` · ${rate}` : ''}
+              </p>
               <ul className="features">
                 <li>
                   <strong style={{ color: 'var(--text)' }}>
@@ -159,7 +153,7 @@ export default async function PricingPage({
       <p className="form-note">
         Not sure yet?{' '}
         <Link href="/services" style={{ color: 'var(--brand)' }}>
-          See everything that's included
+          See everything that&apos;s included
         </Link>
       </p>
     </section>
