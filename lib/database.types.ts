@@ -804,6 +804,7 @@ export type Database = {
         Args: { p_booking_id: string; p_provider_id: string }
         Returns: boolean
       }
+      release_booking: { Args: { p_booking_id: string }; Returns: undefined }
       request_booking: {
         Args: {
           p_address_line1: string
