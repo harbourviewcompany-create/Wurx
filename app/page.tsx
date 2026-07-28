@@ -9,7 +9,7 @@ export const revalidate = 300
 const STEPS = [
   {
     title: 'Pick a plan',
-    body: 'Choose a monthly membership. It tops up your bank of service minutes every billing period.',
+    body: 'Choose a monthly membership sized to how often you need help — not a pile of one-off quotes.',
   },
   {
     title: 'Book a service',
@@ -17,15 +17,15 @@ const STEPS = [
   },
   {
     title: 'A pro shows up',
-    body: 'A vetted local pro handles the job. We deduct only the minutes you actually use.',
+    body: 'A vetted local pro handles the job. We only use the minutes you actually need.',
   },
 ]
 
-/** One concrete job example per plan slug for conversion clarity (F2). */
+/** Outcome-first examples (F2) — lead with jobs, not ledger units. */
 const PLAN_EXAMPLES: Record<string, string> = {
-  starter: 'e.g. one deep clean or a few snow clears',
-  home: 'e.g. bi-weekly clean + lawn in season',
-  plus: 'e.g. weekly clean + handyman + outdoor care',
+  starter: 'About 1 deep clean or a few snow clears a month',
+  home: 'About 2–3 cleans a month, or clean + lawn in season',
+  plus: 'Weekly clean + outdoor care + handyman buffer',
 }
 
 export default async function Home() {
@@ -61,9 +61,8 @@ export default async function Home() {
           <span className="gradient-text">on a subscription.</span>
         </h1>
         <p>
-          One monthly plan, a bank of service minutes, and vetted local pros.
-          Book cleaning, snow removal, lawn care, handyman help and more — and
-          only spend the minutes you use.
+          One monthly plan covers the jobs you actually need — cleans, snow, lawn,
+          handyman help. Book in minutes. Vetted local pros show up. Cancel anytime.
         </p>
         <div className="cta">
           <Link href="/pricing" className="btn btn-primary btn-lg">
@@ -91,8 +90,8 @@ export default async function Home() {
           <span className="eyebrow">Services</span>
           <h2>What we take off your plate</h2>
           <p className="muted">
-            Everything is booked with the minutes in your plan — at a rate that
-            fits the job.
+            Book what you need when you need it — each job uses time from your plan
+            at a rate that fits the work.
           </p>
         </div>
         <div className="grid grid-3">
@@ -103,7 +102,7 @@ export default async function Home() {
               </span>
               <h3 style={{ marginTop: 14 }}>{s.name}</h3>
               <p className="muted" style={{ marginBottom: 0 }}>
-                {s.description ?? 'Booked with your plan minutes.'}
+                {s.description ?? 'Booked with your plan.'}
               </p>
             </div>
           ))}
@@ -135,6 +134,10 @@ export default async function Home() {
         <div className="section-head">
           <span className="eyebrow">Pricing</span>
           <h2>Simple monthly plans</h2>
+          <p className="muted">
+            Pick the plan that matches how often you need help. Minutes are how we
+            meter the work — you book real jobs.
+          </p>
         </div>
         <div className="plans">
           {planList.map((p, i) => {
@@ -152,19 +155,15 @@ export default async function Home() {
                   <b>{formatPrice(p.price_cents)}</b>
                   <small>/ month</small>
                 </div>
-                <p className="muted" style={{ margin: '2px 0 0' }}>
-                  {formatMinutes(p.monthly_minutes)} of service time each month
-                </p>
-                {rate && (
-                  <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
-                    {rate}
-                  </p>
-                )}
                 {example && (
-                  <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>
+                  <p style={{ margin: '8px 0 0', fontWeight: 600, fontSize: 15 }}>
                     {example}
                   </p>
                 )}
+                <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Includes {formatMinutes(p.monthly_minutes)} of service time
+                  {rate ? ` · ${rate}` : ''}
+                </p>
                 <div className="plan-cta" style={{ marginTop: 'auto' }}>
                   <Link
                     href={`/pricing?plan=${p.slug}`}
