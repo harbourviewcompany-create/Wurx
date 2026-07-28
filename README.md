@@ -5,6 +5,8 @@ a monthly plan that grants a bank of **service minutes**, then spend those
 minutes booking services (cleaning, snow removal, lawn care, handyman, etc.).
 Vetted local providers fulfil the bookings.
 
+**Live:** [wurx.vercel.app](https://wurx.vercel.app)
+
 ## Stack
 
 - **Next.js 16** (App Router, React 19) — deployed on **Vercel**
@@ -24,7 +26,7 @@ Browser ──▶ Next.js (Vercel)
             Supabase Postgres  ◀── SECURITY DEFINER RPCs (request/cancel/complete booking)
                 ▲
                 │ service role
-   Stripe ──▶ Edge Functions (create-checkout, stripe-webhook)
+   Stripe ──▶ Edge Functions (create-checkout, stripe-webhook, billing-portal, provider-payouts)
 ```
 
 - **Auth**: Supabase email/password via `@supabase/ssr`. Middleware refreshes the
@@ -33,11 +35,30 @@ Browser ──▶ Next.js (Vercel)
 - **Subscriptions**: the `create-checkout` Edge Function creates a Stripe Checkout
   session (looking the plan up server-side by price id). `stripe-webhook` records
   the subscription and grants `monthly_minutes` to `hour_ledger` on `invoice.paid`
-  (idempotent via a unique `stripe_event_id`).
+  (idempotent via a unique `stripe_event_id`). Secrets live in Supabase Vault
+  (`get_app_secret`).
 - **Bookings**: `request_booking` checks the customer's available balance and
-  atomically creates the booking + an `hour_holds` hold. `complete_booking`
-  captures the hold and writes a `consume` ledger entry; `cancel_booking`
-  releases it. Balances are read from the `available_balances` view.
+  atomically creates the booking + an `hour_holds` hold. Multi-offer dispatch
+  fans out to matching providers; `complete_booking` / `cancel_booking` settle
+  holds. Balances are read from the `available_balances` view.
+- **Providers**: apply at `/become-a-pro`, claim/accept offers, complete jobs,
+  manage availability, Connect payouts.
+- **Admin**: `/admin` — bookings, providers (verify + compliance dates), services,
+  plans, users (roles, grant minutes/plan).
+
+## Product surface (shipped)
+
+| Area | Routes / pieces |
+|------|-----------------|
+| Customer funnel | Home → pricing → auth (plan preserved) → Stripe → dashboard → book → review |
+| Provider | `/become-a-pro`, `/provider/dashboard`, `/provider/profile`, multi-offer accept/decline |
+| Admin | `/admin` bookings / providers / services / plans / users |
+| Billing | Live Stripe prices on plans, checkout + webhook + billing portal + Connect payouts |
+
+Operational launch checklist and owner-only dashboard tasks:
+[`docs/PRODUCTION_READINESS.md`](./docs/PRODUCTION_READINESS.md).
+
+Conversion path and merge order: [`docs/FUNNEL_PLAYBOOK.md`](./docs/FUNNEL_PLAYBOOK.md).
 
 ## Local development
 
@@ -47,13 +68,14 @@ npm install
 npm run dev
 ```
 
-`npm run typecheck` and `npm run build` are gated in CI (`.github/workflows/ci.yml`).
+`npm run typecheck`, `npm test`, and `npm run build` are gated in CI
+(`.github/workflows/ci.yml`).
 
 ## Environment variables
 
 See `.env.example`. The app needs only the public `NEXT_PUBLIC_*` values. Edge
-Functions use `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SIGNING_SECRET` and `SITE_URL`
-(set with `supabase secrets set`).
+Functions read Stripe keys and webhook secrets from **Supabase Vault** via
+`get_app_secret` (not from this repo).
 
 ## Database migrations
 
@@ -65,12 +87,10 @@ SQL migrations live in `supabase/migrations/`. Apply with the Supabase CLI
 ```bash
 supabase functions deploy create-checkout
 supabase functions deploy stripe-webhook --no-verify-jwt
+supabase functions deploy billing-portal
+supabase functions deploy provider-payouts
+supabase functions deploy send-notifications
 ```
 
 The files in `supabase/functions/` mirror what is live — see `supabase/config.toml`
 for the per-function `verify_jwt` settings.
-
-## Not yet built (see docs/PRODUCTION_READINESS.md)
-
-Provider onboarding & dispatch UI, admin console, review submission UI, and the
-Stripe products/prices + webhook wiring that make billing live.
