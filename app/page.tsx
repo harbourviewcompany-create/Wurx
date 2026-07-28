@@ -1,10 +1,12 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatEffectiveRate, formatMinutes, formatPrice } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
-export const revalidate = 300
+// Must be dynamic: signed-in users should never see the marketing shell.
+export const dynamic = 'force-dynamic'
 
 const STEPS = [
   {
@@ -30,6 +32,19 @@ const PLAN_EXAMPLES: Record<string, string> = {
 
 export default async function Home() {
   const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    redirect(provider ? '/provider/dashboard' : '/dashboard')
+  }
 
   const [{ data: services }, { data: plans }] = await Promise.all([
     supabase
