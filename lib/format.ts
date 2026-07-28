@@ -41,3 +41,33 @@ export function formatDateTime(iso: string): string {
     timeZone: 'America/Toronto',
   }).format(new Date(iso))
 }
+
+/**
+ * Normalize a Canadian postal code toward "A1A 1A1".
+ * Returns the original trimmed string if it is not a 6-char alnum pattern.
+ */
+export function formatPostalCode(raw: string): string {
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (cleaned.length !== 6) return raw.trim()
+  return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`
+}
+
+/** First 3 characters of a normalized postal code (FSA), or empty. */
+export function postalFsa(raw: string): string {
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return cleaned.slice(0, 3)
+}
+
+/** Google Maps search URL for a free-form address (no API key). */
+export function mapsSearchUrl(parts: {
+  address_line1?: string | null
+  city?: string | null
+  postal_code?: string | null
+}): string | null {
+  const q = [parts.address_line1, parts.city, parts.postal_code, 'Ottawa', 'ON', 'Canada']
+    .map((s) => (s ?? '').trim())
+    .filter(Boolean)
+    .join(', ')
+  if (!q || q === 'Ottawa, ON, Canada') return null
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+}
