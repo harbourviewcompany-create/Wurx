@@ -151,7 +151,6 @@ a {
   transform: translateY(-2px) rotate(-45deg);
 }
 
-/* Card heading with an icon */
 .card-heading {
   display: flex;
   align-items: center;
@@ -223,7 +222,6 @@ details > summary::-webkit-details-marker {
   }
 }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -274,7 +272,6 @@ details > summary::-webkit-details-marker {
   border-radius: 6px;
 }
 
-/* Layout helpers */
 .grid {
   display: grid;
   gap: 20px;
@@ -320,7 +317,6 @@ details > summary::-webkit-details-marker {
   color: var(--muted);
 }
 
-/* Eyebrow / pill label */
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -362,7 +358,6 @@ details > summary::-webkit-details-marker {
   background: rgba(168, 59, 50, 0.08);
 }
 
-/* Hero */
 .hero {
   padding: 84px 0 44px;
   text-align: center;
@@ -421,7 +416,6 @@ details > summary::-webkit-details-marker {
   margin-right: auto;
 }
 
-/* Steps (how it works) */
 .step-num {
   display: inline-flex;
   align-items: center;
@@ -436,7 +430,6 @@ details > summary::-webkit-details-marker {
   margin-bottom: 12px;
 }
 
-/* Service icon chip */
 .icon-chip {
   display: inline-flex;
   align-items: center;
@@ -450,7 +443,6 @@ details > summary::-webkit-details-marker {
   flex-shrink: 0;
 }
 
-/* Forms */
 .form {
   max-width: 430px;
   margin: 48px auto;
@@ -537,7 +529,6 @@ input[type='checkbox']:focus-visible {
   text-align: center;
 }
 
-/* Pricing */
 .plans {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -634,7 +625,6 @@ input[type='checkbox']:focus-visible {
   margin-top: 22px;
 }
 
-/* Stat */
 .stat {
   font-size: 40px;
   font-weight: 800;
@@ -989,6 +979,20 @@ footer.site-footer {
   align-items: center;
   gap: 6px;
 }
+.service-card-cta {
+  display: block;
+  margin-top: 12px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  color: white;
+  background: var(--text);
+}
+.service-card:hover .service-card-cta {
+  filter: brightness(1.15);
+}
 .cost-pill {
   font-weight: 700;
   font-size: 13.5px;
@@ -1114,6 +1118,44 @@ footer.site-footer {
   text-align: right;
 }
 
+.saved-address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(224, 213, 189, 0.45);
+  font-size: 15px;
+  font-weight: 500;
+}
+.saved-address svg {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.reassure-list {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reassure-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.reassure-list svg {
+  color: var(--good);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .browse-head {
   display: flex;
   align-items: flex-start;
@@ -1135,6 +1177,11 @@ footer.site-footer {
   color: var(--muted);
   font-weight: 600;
   font-size: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
 }
 .link-quiet:hover {
   color: var(--text);
@@ -1197,7 +1244,6 @@ footer.site-footer {
   }
 }
 
-/* Sticky book confirm (mobile) + denser provider offers */
 .booking-form {
   padding-bottom: 24px;
 }
