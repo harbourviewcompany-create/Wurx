@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Check, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatMinutes, formatPrice } from '@/lib/format'
+import { formatEffectiveRate, formatMinutes, formatPrice } from '@/lib/format'
 import { PlanCheckoutButton } from '@/components/PlanCheckoutButton'
 import { AutoStartCheckout } from '@/components/AutoStartCheckout'
 
@@ -29,6 +29,13 @@ const DEFAULT_FEATURES = [
   'Vetted, insured local pros',
   'Cancel anytime',
 ]
+
+/** One concrete job example per plan slug (F2). */
+const PLAN_EXAMPLES: Record<string, string> = {
+  starter: 'e.g. one deep clean or a few snow clears',
+  home: 'e.g. bi-weekly clean + lawn in season',
+  plus: 'e.g. weekly clean + handyman + outdoor care',
+}
 
 export default async function PricingPage({
   searchParams,
@@ -80,6 +87,8 @@ export default async function PricingPage({
         {list.map((p, i) => {
           const featured = i === featuredIndex
           const features = PLAN_FEATURES[p.slug] ?? DEFAULT_FEATURES
+          const rate = formatEffectiveRate(p.price_cents, p.monthly_minutes)
+          const example = PLAN_EXAMPLES[p.slug]
           return (
             <div
               key={p.id}
@@ -96,6 +105,16 @@ export default async function PricingPage({
               <p className="muted" style={{ margin: '2px 0 0' }}>
                 {p.description ?? `${formatMinutes(p.monthly_minutes)} of service time`}
               </p>
+              {rate && (
+                <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
+                  {rate}
+                </p>
+              )}
+              {example && (
+                <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  {example}
+                </p>
+              )}
               <ul className="features">
                 <li>
                   <strong style={{ color: 'var(--text)' }}>

@@ -21,6 +21,18 @@ export function formatMinutes(minutes: number): string {
   return `${sign}${h}h ${rem}m`
 }
 
+/**
+ * Effective rate for a plan: price_cents / (monthly_minutes/60)
+ * e.g. 17900 cents / 5h → "~$36/h of service time".
+ */
+export function formatEffectiveRate(priceCents: number, monthlyMinutes: number): string | null {
+  if (!monthlyMinutes || monthlyMinutes <= 0) return null
+  const hours = monthlyMinutes / 60
+  const dollarsPerHour = priceCents / 100 / hours
+  const rounded = Math.round(dollarsPerHour)
+  return `~$${rounded}/h of service time`
+}
+
 /** Format an ISO timestamp for display in America/Toronto. */
 export function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat('en-CA', {

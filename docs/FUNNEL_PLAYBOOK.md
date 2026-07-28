@@ -18,16 +18,16 @@ Land → Choose plan (slug in state) → Auth (if needed, plan preserved)
 
 | Step | Target UX | Current code | Gap |
 |------|-----------|--------------|-----|
-| **Land** | Primary CTA = choose plan | `app/page.tsx` → `/signup` (“Get started”) | CTA should be `#plans` or `/pricing?plan=` |
-| **Plans on home** | Choose {plan} deep-links with slug | Links only to `/pricing` | Pass `?plan=home` (etc.) |
-| **Pricing** | Checkout or signup-with-plan | `PlanCheckoutButton` → unauthed goes `/login?redirect=/pricing` | Preserve `priceId` / `plan` slug through auth |
-| **Signup** | After session → checkout if plan chosen | Always `/dashboard` | Read `?plan=` / `?priceId=` → invoke checkout or redirect pricing |
-| **Login** | Same redirect chain | `?redirect=` exists | Support `/pricing?plan=` and post-login auto-checkout |
-| **Checkout** | Stripe session for that price | Edge `create-checkout` | Keep server-side price lookup; success_url dashboard |
-| **Dashboard (no sub)** | Activation → Choose plan | Already good | Optional: preselect plan from query |
-| **Dashboard (active)** | Balance + Book primary | Already good | First-run empty bookings CTA is clear |
-| **Book** | Service → time → address → confirm + minutes | `app/dashboard/book` | Ensure profile address prefill |
-| **Dispatch** | Multi-offer or claim | PR #29 fan-out notifs; PR #30 multi-offer (if open) | Merge + apply migrations |
+| **Land** | Primary CTA = choose plan | `app/page.tsx` → `/pricing` (“Choose a plan”) | ✅ |
+| **Plans on home** | Choose {plan} deep-links with slug | `href={`/pricing?plan=${p.slug}`}` + rate/example copy | ✅ F2 |
+| **Pricing** | Checkout or signup-with-plan | `PlanCheckoutButton` + `AutoStartCheckout` | ✅ |
+| **Signup** | After session → checkout if plan chosen | `?priceId=` / `?plan=` → `startCheckoutSession` | ✅ F1 |
+| **Login** | Same redirect chain | `priceId` + auto-checkout after session | ✅ F1 |
+| **Checkout** | Stripe session for that price | Edge `create-checkout` | ✅ server-side price lookup |
+| **Dashboard (no sub)** | Activation → Choose plan | Already good | Optional preselect |
+| **Dashboard (active)** | Balance + Book primary | Already good | F3 lag state optional |
+| **Book** | Service → time → address → confirm + minutes | `ServiceBrowser` + profile prefill + cost summary | ✅ F4 |
+| **Dispatch** | Multi-offer or claim | Offers + notifications + admin redispatch | Apply live migrations |
 
 ---
 
@@ -38,11 +38,13 @@ Land → Choose plan (slug in state) → Auth (if needed, plan preserved)
 | Marketing / home | `app/page.tsx` |
 | Pricing + features copy | `app/pricing/page.tsx` |
 | Stripe subscribe button | `components/PlanCheckoutButton.tsx` |
+| Checkout URL helpers | `lib/checkout.ts` |
+| Effective rate helper | `lib/format.ts` → `formatEffectiveRate` |
 | Signup | `app/signup/page.tsx` |
 | Login | `app/login/page.tsx` |
 | Auth callback | `app/auth/callback/route.ts` |
 | Customer dashboard | `app/dashboard/page.tsx` |
-| Book flow | `app/dashboard/book/page.tsx` |
+| Book flow | `app/dashboard/book/page.tsx` + `ServiceBrowser` |
 | Checkout edge fn | `supabase/functions/create-checkout` |
 | Webhook / minute grants | `supabase/functions/stripe-webhook` |
 | Billing portal | `components/ManageSubscriptionButton.tsx` + `billing-portal` fn |
@@ -57,43 +59,32 @@ CI/`tsc` fails (see multi-offer type miss).
 
 ## 3. Funnel implementation tickets (ordered)
 
-### F1 — Preserve plan through auth (highest ROI)
+### F1 — Preserve plan through auth — ✅ done on main
 
-1. Home plan buttons: `href={`/pricing?plan=${p.slug}`}`.
-2. Home primary CTA: “Choose a plan” → `/pricing` (or `#plans` on same page).
-3. `PlanCheckoutButton`: if `!isAuthed`, go  
-   `/signup?plan=${slug}&priceId=${priceId}` (or login with same query).
-4. Signup success with session: if `priceId` present, invoke `create-checkout`
-   then redirect to Stripe; else `/dashboard`.
-5. Login: honor `redirect` **and** optional `priceId` to auto-start checkout
-   after session.
+Unauthenticated “Choose {plan}” → signup/login with `priceId` (+ optional `plan`)
+→ session → `create-checkout` → Stripe without re-picking the plan.
 
-Acceptance: unauthenticated user can tap **Choose Home** and end on Stripe with
-Home selected without re-picking the plan.
+### F2 — Plan card clarity — ✅ done (this branch)
 
-### F2 — Plan card clarity (copy only)
-
-On home + pricing cards add:
+On home + pricing cards:
 
 - Effective rate: `price_cents / (monthly_minutes/60)` as “~$X/h of service time”.
 - One job example per plan (Starter / Home / Plus).
 - Microcopy under CTA: “Account + secure checkout — cancel anytime.”
 
-### F3 — Post-checkout first run
+### F3 — Post-checkout first run (optional polish)
 
-- Stripe success_url already → dashboard; ensure activation vs active branch
-  still correct after webhook lag (optional “minutes arriving…” state if
-  balance 0 and sub just created).
+- Stripe success_url already → dashboard; optional “minutes arriving…” if balance
+  is 0 and a subscription row was just created (webhook lag).
 
-### F4 — Book path polish
+### F4 — Book path polish — ✅ done on main
 
 - Prefill address from `profiles`.
-- Show estimated minutes before confirm (use service multiplier if present).
+- Show estimated minutes before confirm (`ServiceBrowser` cost summary).
 
-### F5 — Provider side (parallel track)
+### F5 — Provider side (ops)
 
-- Merge Phase 2 provider ops (pending + compliance) and multi-offer UI.
-- Apply SQL migrations on live.
+- Apply Phase 2 + multi-offer SQL on live.
 - Verify: book → offers/notifications → accept → complete → earnings.
 
 ---
@@ -110,7 +101,7 @@ Do **owner dashboard tasks** before heavy funnel UI, or signup remains broken.
 2. **Live subscribe test** — one real Checkout on production; confirm
    `hour_ledger` grant.
 3. **Branch protection** — fix required checks that nothing produces (blocks merges).
-4. **Node 22** on Vercel project + merge **PR #31** (main-only deploys).
+4. **Node 22** on Vercel project + main-only deploys.
 5. Rotate any live keys that were exposed in chat.
 
 ### Merge order for open work
@@ -118,13 +109,10 @@ Do **owner dashboard tasks** before heavy funnel UI, or signup remains broken.
 | Priority | PR / work | Why |
 |----------|-----------|-----|
 | 0 | Fix branch protection | Unblocks everything |
-| 1 | PR #31 Vercel config | Quiet, deterministic deploys |
-| 2 | PR #13 account recovery (rebase if needed) | Signup/reset depend on SMTP but code must land |
-| 3 | PR #29 Phase 2 provider ops | Pending apps + compliance |
-| 4 | Multi-offer dispatch (+ types) | Provider accept/decline |
-| 5 | **F1–F4 funnel PRs** | Conversion path |
-
-Rebase long-lived branches onto current `main` before merge (`#29` base may be stale).
+| 1 | PR #36 shell R1/R2 (if still open) | global-error + loading skeletons |
+| 2 | This branch: F2 + docs truth | Conversion copy + README accuracy |
+| 3 | Apply SQL migrations on live | Provider ops + multi-offer |
+| 4 | Optional F3 minutes-arriving state | Post-checkout lag |
 
 ### After each merge
 

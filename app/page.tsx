@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatMinutes, formatPrice } from '@/lib/format'
+import { formatEffectiveRate, formatMinutes, formatPrice } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
 export const revalidate = 300
@@ -20,6 +20,13 @@ const STEPS = [
     body: 'A vetted local pro handles the job. We deduct only the minutes you actually use.',
   },
 ]
+
+/** One concrete job example per plan slug for conversion clarity (F2). */
+const PLAN_EXAMPLES: Record<string, string> = {
+  starter: 'e.g. one deep clean or a few snow clears',
+  home: 'e.g. bi-weekly clean + lawn in season',
+  plus: 'e.g. weekly clean + handyman + outdoor care',
+}
 
 export default async function Home() {
   const supabase = await createClient()
@@ -132,6 +139,8 @@ export default async function Home() {
         <div className="plans">
           {planList.map((p, i) => {
             const featured = i === featuredIndex
+            const rate = formatEffectiveRate(p.price_cents, p.monthly_minutes)
+            const example = PLAN_EXAMPLES[p.slug]
             return (
               <div
                 key={p.slug}
@@ -146,6 +155,16 @@ export default async function Home() {
                 <p className="muted" style={{ margin: '2px 0 0' }}>
                   {formatMinutes(p.monthly_minutes)} of service time each month
                 </p>
+                {rate && (
+                  <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
+                    {rate}
+                  </p>
+                )}
+                {example && (
+                  <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>
+                    {example}
+                  </p>
+                )}
                 <div className="plan-cta" style={{ marginTop: 'auto' }}>
                   <Link
                     href={`/pricing?plan=${p.slug}`}
@@ -154,6 +173,12 @@ export default async function Home() {
                   >
                     Choose {p.name}
                   </Link>
+                  <p
+                    className="muted"
+                    style={{ margin: '10px 0 0', fontSize: 12, textAlign: 'center' }}
+                  >
+                    Account + secure checkout — cancel anytime.
+                  </p>
                 </div>
               </div>
             )

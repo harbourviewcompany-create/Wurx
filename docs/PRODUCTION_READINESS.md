@@ -9,6 +9,7 @@ merge order, and smoke checklist. Use that before opening funnel or Phase 2 PRs.
 
 > **Shell polish remainder (PR #13):** do not merge #13. Unique leftovers are
 > ticketed in [`docs/PR13_CHERRY_PICK.md`](./PR13_CHERRY_PICK.md) (R1–R6).
+> Open: [PR #36](https://github.com/harbourviewcompany-create/Wurx/pull/36) (R1 + R2).
 
 ## ✅ Done
 
@@ -66,14 +67,20 @@ These were listed as “not built” earlier; they exist on `main` and this bran
 - **Matching** — `provider_can_serve_booking` (service + FSA + availability +
   blackout + verification + insurance). Shared by claim path, open-jobs RLS, and
   admin assignment.
-- **Admin console** — bookings (status + assign), providers (verify/reject with
-  insurance + background-check dates, activate, payout), services, plans, users.
+- **Admin console** — bookings (status + assign + redispatch), providers
+  (verify/reject with insurance + background-check dates, activate, payout),
+  services, plans, users.
 - **Review submission** — `ReviewForm` on completed customer bookings; rating
   sync trigger on `providers.rating`.
 - **Customer profile + subscription management** — profile edit + Stripe billing
   portal button.
-- **Job fan-out** — on booking insert, matching verified providers receive an
-  in-app `job_available` notification (email when Resend is configured).
+- **Job fan-out / multi-offer** — matching verified providers get offers;
+  accept/decline via `respond_to_offer`; in-app notifications (email when Resend
+  is configured).
+- **Funnel F1** — plan/priceId preserved through signup and login into checkout
+  (`lib/checkout.ts`, `PlanCheckoutButton`, signup/login pages).
+- **Funnel F2** — effective rate (`~$X/h of service time`) + example job copy on
+  home and pricing cards.
 
 ## ⛳ Remaining to go live (owner action)
 
@@ -97,9 +104,11 @@ book a service (holds minutes) → complete (consumes) / cancel (releases).
 ### 4. Apply new migrations on the live project
 ```bash
 supabase db push
-# or apply:
+# or apply any Phase 2 / multi-offer migrations not yet on the project:
 #   20260727120000_wurx_phase2_provider_ops.sql
 #   20260727120100_wurx_admin_provider_compliance.sql
+#   20260727205754_wurx_multi_offer_dispatch.sql
+#   …
 ```
 
 ## Known advisor notes (accepted)
@@ -111,14 +120,10 @@ supabase db push
 
 ## 🔭 Later (nice-to-have, not launch blockers)
 
-Much of Phase 2 UI exists on `main` (provider apply, claim/complete, admin,
-reviews, billing portal, multi-offer accept/decline dispatch). Remaining
-ops/dispatch work is tracked in open PRs and in `FUNNEL_PLAYBOOK.md` §3 F5 /
-§4 merge order.
-
 - Document upload for insurance / background-check evidence (dates are recorded
   today; files are not).
 - Provider map / radius-based geo match beyond FSA lists.
+- Funnel F3 optional “minutes arriving…” state if webhook lags after checkout.
 
 ---
 
@@ -173,4 +178,4 @@ project and verified**, not just committed.
 5. **Rotate the `rk_live_` key** that was pasted in chat.
 6. **Fix the `main` branch-protection rule** — it requires two status-check
    contexts nothing produces, which blocks every PR.
-7. **Apply Phase 2 migrations** on the live Supabase project (see above).
+7. **Apply Phase 2 / multi-offer migrations** on the live Supabase project (see above).
