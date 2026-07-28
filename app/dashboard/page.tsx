@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Check, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { formatDateTime, formatMinutes } from '@/lib/format'
+import { formatDateTime, formatMinutes, formatWindow } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
 import { ServiceIcon } from '@/components/ServiceIcon'
 import { ReviewForm } from '@/components/ReviewForm'
@@ -10,6 +10,7 @@ import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
 import { NotificationsPanel } from '@/components/NotificationsPanel'
 import { MinutesArriving } from '@/components/MinutesArriving'
 import { LowBalanceNudge } from '@/components/LowBalanceNudge'
+import { ActiveJobCard } from '@/components/ActiveJobCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,7 @@ export default async function Dashboard({
   if (!user) redirect('/login?redirect=/dashboard')
 
   const [profileRes, subRes, balanceRes, bookingsRes, notifRes, servicesRes] = await Promise.all([
-    supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
+    supabase.from('profiles').select('full_name, email, phone').eq('id', user.id).single(),
     supabase
       .from('subscriptions')
       .select('status, current_period_end, cancel_at_period_end, plans(name, monthly_minutes)')
@@ -78,7 +79,7 @@ export default async function Dashboard({
     supabase
       .from('bookings')
       .select(
-        'id, status, scheduled_start, duration_minutes, services(name, icon, slug), providers(id, business_name, rating)',
+        'id, status, scheduled_start, window_end, duration_minutes, address_line1, city, postal_code, services(name, icon, slug), providers(id, business_name, rating)',
       )
       .eq('user_id', user.id)
       .order('scheduled_start', { ascending: false })
@@ -89,10 +90,7 @@ export default async function Dashboard({
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20),
-    supabase
-      .from('services')
-      .select('slug, name, is_active')
-      .eq('is_active', true),
+    supabase.from('services').select('slug, name, is_active').eq('is_active', true),
   ])
 
   const profile = profileRes.data
@@ -112,15 +110,11 @@ export default async function Dashboard({
     return (
       <section className="container section">
         <div className="activate rise">
-          <span className="eyebrow">
-            Welcome{firstName ? `, ${firstName}` : ''}
-          </span>
+          <span className="eyebrow">Welcome{firstName ? `, ${firstName}` : ''}</span>
           <h1>Let&apos;s get your home handled.</h1>
           <p>
-            Pick a plan, book your first service, and hand your to-do list to a
-            vetted local pro.
+            Pick a plan, book your first service, and hand your to-do list to a vetted local pro.
           </p>
-
           <div className="stepper">
             <div className="step">
               <span className="step-num">1</span>
@@ -144,20 +138,14 @@ export default async function Dashboard({
               </div>
             </div>
           </div>
-
           <div className="cta-stack">
-            <Link
-              href="/pricing"
-              className="btn btn-primary btn-lg"
-              style={{ minWidth: 240 }}
-            >
+            <Link href="/pricing" className="btn btn-primary btn-lg" style={{ minWidth: 240 }}>
               Choose your plan
             </Link>
             <Link href="/dashboard/book" className="link-quiet">
               or browse what we do first →
             </Link>
           </div>
-
           <div className="trust-row" style={{ marginTop: 22 }}>
             <span>
               <ShieldCheck size={16} /> Vetted &amp; insured pros
@@ -195,6 +183,15 @@ export default async function Dashboard({
   const firstJobHints = FIRST_JOB_HINTS.filter((h) => activeSlugs.has(h.slug))
   const showFirstJobGuide = bookings.length === 0 && available > 0
 
+  const activeJob =
+    bookings.find((b) => b.status === 'in_progress') ??
+    bookings.find((b) => b.status === 'confirmed')
+
+  const lastCompleted = bookings.find((b) => b.status === 'completed')
+  const lastService = lastCompleted
+    ? ((lastCompleted.services ?? null) as { name: string; icon: string | null; slug: string } | null)
+    : null
+
   return (
     <section className="container section">
       <MinutesArriving active={awaitingMinutes} />
@@ -211,24 +208,57 @@ export default async function Dashboard({
         >
           <p style={{ margin: 0, fontWeight: 600 }}>Booking requested</p>
           <p className="muted" style={{ margin: '6px 0 0' }}>
-            We’re matching a vetted pro for your time window. You’ll see updates here.
+            We’re matching a vetted pro for your window. We’ll notify you when they’re assigned — and
+            text when they’re on the way{profile?.phone ? '' : ' (add a phone in Profile for SMS)'}.
           </p>
         </div>
       )}
 
-      <div
-        className="list-row"
-        style={{ paddingTop: 0, borderBottom: 'none' }}
-      >
-        <h1 style={{ margin: 0 }}>
-          Welcome{firstName ? `, ${firstName}` : ''}
-        </h1>
+      <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
+        <h1 style={{ margin: 0 }}>Welcome{firstName ? `, ${firstName}` : ''}</h1>
         <Link href="/dashboard/book" className="btn btn-primary btn-lg">
           Book a service
         </Link>
       </div>
 
-      <div className="card dash-hero rise" style={{ marginTop: 6 }}>
+      {activeJob && (
+        <ActiveJobCard
+          booking={{
+            id: activeJob.id,
+            status: activeJob.status,
+            scheduled_start: activeJob.scheduled_start,
+            window_end: (activeJob as { window_end?: string | null }).window_end,
+            duration_minutes: activeJob.duration_minutes,
+            address_line1: (activeJob as { address_line1?: string | null }).address_line1,
+            city: (activeJob as { city?: string | null }).city,
+            postal_code: (activeJob as { postal_code?: string | null }).postal_code,
+            services: (activeJob.services ?? null) as { name: string; slug: string } | null,
+            providers: (activeJob.providers ?? null) as {
+              business_name: string
+              rating: number | null
+            } | null,
+          }}
+        />
+      )}
+
+      {lastCompleted && lastService?.slug && !activeJob && (
+        <div className="card rise" style={{ marginTop: 18 }}>
+          <p className="tile-label">Book again in one tap</p>
+          <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{lastService.name}</h2>
+          <p className="muted" style={{ margin: '0 0 12px' }}>
+            Same length as last time ({formatMinutes(lastCompleted.duration_minutes)}). Address
+            pre-fills from your profile.
+          </p>
+          <Link
+            href={`/dashboard/book?service=${encodeURIComponent(lastService.slug)}&duration=${lastCompleted.duration_minutes}`}
+            className="btn btn-primary"
+          >
+            Book {lastService.name} again
+          </Link>
+        </div>
+      )}
+
+      <div className="card dash-hero rise" style={{ marginTop: 18 }}>
         <div className="ring">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <defs>
@@ -237,14 +267,7 @@ export default async function Dashboard({
                 <stop offset="100%" stopColor="#c1440e" />
               </linearGradient>
             </defs>
-            <circle
-              cx="60"
-              cy="60"
-              r={R}
-              fill="none"
-              stroke="rgba(28,43,58,0.1)"
-              strokeWidth="12"
-            />
+            <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(28,43,58,0.1)" strokeWidth="12" />
             <circle
               cx="60"
               cy="60"
@@ -295,30 +318,29 @@ export default async function Dashboard({
             <h2 style={{ margin: 0, fontSize: 18 }}>Book your first job in 2 minutes</h2>
           </div>
           <p className="muted" style={{ margin: '0 0 14px' }}>
-            Pick something common — we’ll use your saved address when you have one,
-            and show exactly how many minutes it uses before you confirm.
+            Pick something common — we’ll use your saved address when you have one.
           </p>
           <div className="grid grid-3" style={{ gap: 12 }}>
-            {(firstJobHints.length > 0 ? firstJobHints : [{ slug: '', label: 'Browse services', blurb: 'See everything we do' }]).map(
-              (h) => (
-                <Link
-                  key={h.slug || 'browse'}
-                  href={h.slug ? `/dashboard/book?service=${encodeURIComponent(h.slug)}` : '/dashboard/book'}
-                  className="card card-hover"
-                  style={{ textDecoration: 'none', color: 'inherit', margin: 0 }}
-                >
-                  <strong style={{ display: 'block', marginBottom: 4 }}>{h.label}</strong>
-                  <span className="muted" style={{ fontSize: 14 }}>
-                    {h.blurb}
-                  </span>
-                </Link>
-              ),
-            )}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Link href="/dashboard/book" className="btn btn-primary">
-              Choose a service
-            </Link>
+            {(firstJobHints.length > 0
+              ? firstJobHints
+              : [{ slug: '', label: 'Browse services', blurb: 'See everything we do' }]
+            ).map((h) => (
+              <Link
+                key={h.slug || 'browse'}
+                href={
+                  h.slug
+                    ? `/dashboard/book?service=${encodeURIComponent(h.slug)}`
+                    : '/dashboard/book'
+                }
+                className="card card-hover"
+                style={{ textDecoration: 'none', color: 'inherit', margin: 0 }}
+              >
+                <strong style={{ display: 'block', marginBottom: 4 }}>{h.label}</strong>
+                <span className="muted" style={{ fontSize: 14 }}>
+                  {h.blurb}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
@@ -335,12 +357,6 @@ export default async function Dashboard({
               {formatMinutes(plan.monthly_minutes)} refreshed every month
             </p>
           )}
-          {sub?.current_period_end && (
-            <p className="muted" style={{ margin: '2px 0' }}>
-              {sub.cancel_at_period_end ? 'Ends' : 'Renews'}{' '}
-              {formatDateTime(sub.current_period_end)}
-            </p>
-          )}
           <div style={{ marginTop: 12 }}>
             <ManageSubscriptionButton />
           </div>
@@ -354,6 +370,11 @@ export default async function Dashboard({
           <p className="muted" style={{ margin: '2px 0' }}>
             {profile?.email ?? user.email}
           </p>
+          {!profile?.phone && (
+            <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+              Add a phone for “pro en route” texts.
+            </p>
+          )}
           <Link href="/dashboard/profile" style={{ color: 'var(--brand)', fontSize: 14 }}>
             Edit profile
           </Link>
@@ -367,17 +388,12 @@ export default async function Dashboard({
           <h2 style={{ margin: 0 }}>Your bookings</h2>
         </div>
         <div className="card" style={{ marginTop: 6 }}>
-          {bookings.length === 0 && !showFirstJobGuide && (
+          {bookings.length === 0 && (
             <p className="muted" style={{ margin: 0 }}>
               No bookings yet.{' '}
               <Link href="/dashboard/book" style={{ color: 'var(--brand)' }}>
                 Book a service
               </Link>
-            </p>
-          )}
-          {bookings.length === 0 && showFirstJobGuide && (
-            <p className="muted" style={{ margin: 0 }}>
-              Your list will show up here after you book.
             </p>
           )}
           {bookings.map((b) => {
@@ -392,10 +408,10 @@ export default async function Dashboard({
             const cancellable = b.status === 'requested' || b.status === 'confirmed'
             const needsReview =
               b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
-            const bookAgainHref =
-              service?.slug
-                ? `/dashboard/book?service=${encodeURIComponent(service.slug)}&duration=${b.duration_minutes}`
-                : '/dashboard/book'
+            const bookAgainHref = service?.slug
+              ? `/dashboard/book?service=${encodeURIComponent(service.slug)}&duration=${b.duration_minutes}`
+              : '/dashboard/book'
+            const windowEnd = (b as { window_end?: string | null }).window_end
             return (
               <div key={b.id} className="list-row" style={{ flexWrap: 'wrap' }}>
                 <div>
@@ -404,7 +420,10 @@ export default async function Dashboard({
                     {service?.name ?? 'Service'}
                   </strong>
                   <div className="muted" style={{ fontSize: 14 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
+                    {windowEnd
+                      ? formatWindow(b.scheduled_start, windowEnd)
+                      : formatDateTime(b.scheduled_start)}{' '}
+                    · {formatMinutes(b.duration_minutes)}
                   </div>
                   {provider && (
                     <div className="muted" style={{ fontSize: 14 }}>
