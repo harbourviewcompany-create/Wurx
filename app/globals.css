@@ -163,6 +163,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
   background: rgba(168, 59, 50, 0.12); border: 1px solid rgba(168, 59, 50, 0.4); color: #6b241d;
   padding: 10px 12px; border-radius: 4px; font-size: 14px; margin-bottom: 8px;
 }
+.form-note {
+  text-align: center; font-size: 14px; color: var(--muted); margin: 16px 0 0; line-height: 1.55;
+}
 .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: stretch; }
 @media (max-width: 860px) { .plans { grid-template-columns: 1fr; max-width: 420px; margin-inline: auto; } }
 .plan { display: flex; flex-direction: column; }

@@ -20,14 +20,16 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  # Named `synthetics`, not `build`: ci.yml already has a `build` job, and two
+  # same-named jobs render as two indistinguishable "build" checks on every PR.
+  synthetics:
     runs-on: ubuntu-latest
     env:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     # Skip cleanly when Datadog credentials are not configured, instead of
     # failing every pull request. Add DD_API_KEY / DD_APP_KEY repository secrets
