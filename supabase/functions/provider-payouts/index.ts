@@ -204,6 +204,14 @@ Deno.serve(async (req: Request) => {
     return json({ url: link.url })
   } catch (error) {
     console.error('provider-payouts error:', error)
-    return json({ error: (error as Error).message }, 400)
+    // Stripe errors here are almost always platform-side (Connect not
+    // enabled yet, a key missing a permission, etc.) -- nothing the
+    // provider can act on. Show them something calm instead of Stripe's
+    // internal wording; the real detail is in the log line above.
+    const message =
+      error instanceof Stripe.errors.StripeError
+        ? "Payouts aren't available yet -- we're finishing setup on our end. Check back soon."
+        : (error as Error).message
+    return json({ error: message }, 400)
   }
 })

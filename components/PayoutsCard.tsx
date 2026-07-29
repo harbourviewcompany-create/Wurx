@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Banknote, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import { formatPrice } from '@/lib/format'
 
 /**
@@ -33,7 +34,14 @@ export function PayoutsCard({
         error?: string
       }>('provider-payouts', { body: { action: 'onboard' } })
 
-      if (fnError) throw new Error(fnError.message)
+      if (fnError) {
+        let message = fnError.message
+        if (fnError instanceof FunctionsHttpError) {
+          const body = await fnError.context.json().catch(() => null)
+          if (body?.error) message = body.error
+        }
+        throw new Error(message)
+      }
       if (data?.error) throw new Error(data.error)
       if (!data?.url) throw new Error('Could not start payout setup.')
 
