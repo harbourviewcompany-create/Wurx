@@ -180,6 +180,30 @@ export default async function Dashboard({
       : { data: [] as { booking_id: string }[] }
   const reviewedBookingIds = new Set((existingReviews ?? []).map((r) => r.booking_id))
 
+  const { data: photoRows } =
+    completedIds.length > 0
+      ? await supabase
+          .from('booking_photos')
+          .select('booking_id, storage_path, caption')
+          .in('booking_id', completedIds)
+      : { data: [] as { booking_id: string; storage_path: string; caption: string | null }[] }
+
+  const photosByBooking = new Map<string, { url: string; caption: string | null }[]>()
+  if (photoRows && photoRows.length > 0) {
+    const paths = photoRows.map((p) => p.storage_path)
+    const { data: signed } = await supabase.storage
+      .from('job-photos')
+      .createSignedUrls(paths, 3600)
+    const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]))
+    for (const row of photoRows) {
+      const url = urlByPath.get(row.storage_path)
+      if (!url) continue
+      const list = photosByBooking.get(row.booking_id) ?? []
+      list.push({ url, caption: row.caption })
+      photosByBooking.set(row.booking_id, list)
+    }
+  }
+
   const firstJobHints = FIRST_JOB_HINTS.filter((h) => activeSlugs.has(h.slug))
   const showFirstJobGuide = bookings.length === 0 && available > 0
 
@@ -445,6 +469,26 @@ export default async function Dashboard({
                 </div>
                 {needsReview && provider && (
                   <ReviewForm bookingId={b.id} providerId={provider.id} />
+                )}
+                {(photosByBooking.get(b.id) ?? []).length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', width: '100%' }}>
+                    {(photosByBooking.get(b.id) ?? []).map((photo, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <a key={i} href={photo.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={photo.url}
+                          alt={photo.caption ?? 'Completed job photo'}
+                          width={84}
+                          height={84}
+                          style={{
+                            objectFit: 'cover',
+                            borderRadius: 4,
+                            border: '1px solid var(--border)',
+                          }}
+                        />
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             )
