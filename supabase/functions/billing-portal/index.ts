@@ -68,6 +68,12 @@ Deno.serve(async (req: Request) => {
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
       return_url: `${siteUrl}/dashboard`,
+      // This Stripe account is shared with another product (Harbourview).
+      // The account-wide default portal configuration is generic/unbranded;
+      // this pins the Wurx-specific one (correct headline, privacy/terms
+      // links) instead of depending on which config happens to be marked
+      // default account-wide.
+      configuration: 'bpc_1TxZjSHGqu2rN3IeTzK2c2x5',
     })
 
     return json({ url: session.url })
