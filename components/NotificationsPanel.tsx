@@ -24,18 +24,33 @@ export type Notification = {
  * watching this page sees "a pro claimed your job" without refreshing.
  * RLS filters the stream server-side — a subscriber only ever receives rows
  * where `user_id = auth.uid()`.
+ *
+ * `userId` is optional: when omitted, the panel reads the signed-in user from
+ * the browser client so call sites do not need to change.
  */
 export function NotificationsPanel({
   initial,
-  userId,
+  userId: userIdProp,
 }: {
   initial: Notification[]
-  userId: string
+  userId?: string
 }) {
   const router = useRouter()
   const [items, setItems] = useState(initial)
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set())
+  const [resolvedUserId, setResolvedUserId] = useState<string | null>(userIdProp ?? null)
   const unread = items.filter((n) => !n.read_at).length
+
+  useEffect(() => {
+    if (userIdProp) {
+      setResolvedUserId(userIdProp)
+      return
+    }
+    const supabase = createClient()
+    void supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.id) setResolvedUserId(data.user.id)
+    })
+  }, [userIdProp])
 
   // Adopt the server's list whenever the page re-renders with fresh data.
   const initialRef = useRef(initial)
@@ -47,6 +62,8 @@ export function NotificationsPanel({
   }, [initial])
 
   useEffect(() => {
+    if (!resolvedUserId) return
+
     const supabase = createClient()
     let poll: ReturnType<typeof setInterval> | undefined
 
@@ -59,14 +76,14 @@ export function NotificationsPanel({
     }
 
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(`notifications:${resolvedUserId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${userId}`,
+          filter: `user_id=eq.${resolvedUserId}`,
         },
         (payload) => {
           const row = payload.new as Notification
@@ -86,7 +103,7 @@ export function NotificationsPanel({
       if (poll) clearInterval(poll)
       void supabase.removeChannel(channel)
     }
-  }, [userId, router])
+  }, [resolvedUserId, router])
 
   async function markAllRead() {
     const ids = items.filter((n) => !n.read_at).map((n) => n.id)
