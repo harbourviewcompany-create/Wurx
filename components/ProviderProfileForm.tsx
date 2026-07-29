@@ -103,29 +103,20 @@ export function ProviderProfileForm({
       <textarea id="bio" rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
 
       <label>Services you offer</label>
-      <div className="grid grid-2" style={{ gap: 8, marginBottom: 4 }}>
-        {services.map((s) => (
-          <label
-            key={s.slug}
-            className="card"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 14px',
-              margin: 0,
-              cursor: 'pointer',
-              borderColor: selectedSlugs.includes(s.slug) ? 'var(--brand)' : undefined,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={selectedSlugs.includes(s.slug)}
-              onChange={() => toggleService(s.slug)}
-            />
-            {s.name}
-          </label>
-        ))}
+      <div className="service-check-grid">
+        {services.map((s) => {
+          const on = selectedSlugs.includes(s.slug)
+          return (
+            <label key={s.slug} className={`service-check${on ? ' is-on' : ''}`}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() => toggleService(s.slug)}
+              />
+              <span>{s.name}</span>
+            </label>
+          )
+        })}
       </div>
 
       <div className="grid grid-2" style={{ gap: 12 }}>
