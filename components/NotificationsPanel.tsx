@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { Bell, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDateTime } from '@/lib/format'
@@ -18,10 +19,74 @@ export type Notification = {
  * In-app notification feed. Email delivery is handled separately by the
  * send-notifications edge function; this is the always-available surface so the
  * service loop never depends on an email provider being configured.
+ *
+ * Rows arrive over Realtime as booking triggers write them, so a customer
+ * watching this page sees "a pro claimed your job" without refreshing.
+ * RLS filters the stream server-side — a subscriber only ever receives rows
+ * where `user_id = auth.uid()`.
  */
-export function NotificationsPanel({ initial }: { initial: Notification[] }) {
+export function NotificationsPanel({
+  initial,
+  userId,
+}: {
+  initial: Notification[]
+  userId: string
+}) {
+  const router = useRouter()
   const [items, setItems] = useState(initial)
+  const [liveIds, setLiveIds] = useState<Set<string>>(new Set())
   const unread = items.filter((n) => !n.read_at).length
+
+  // Adopt the server's list whenever the page re-renders with fresh data.
+  const initialRef = useRef(initial)
+  useEffect(() => {
+    if (initial !== initialRef.current) {
+      initialRef.current = initial
+      setItems(initial)
+    }
+  }, [initial])
+
+  useEffect(() => {
+    const supabase = createClient()
+    let poll: ReturnType<typeof setInterval> | undefined
+
+    // If Realtime can't be reached — disabled on the project, a proxy that
+    // blocks WebSockets, a flaky network — fall back to a slow refresh so the
+    // feed still catches up instead of going stale silently.
+    function startPolling() {
+      if (poll) return
+      poll = setInterval(() => router.refresh(), 60_000)
+    }
+
+    const channel = supabase
+      .channel(`notifications:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const row = payload.new as Notification
+          setItems((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev]))
+          setLiveIds((prev) => new Set(prev).add(row.id))
+          // Booking state changed — pull fresh bookings list and minute balance.
+          router.refresh()
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          startPolling()
+        }
+      })
+
+    return () => {
+      if (poll) clearInterval(poll)
+      void supabase.removeChannel(channel)
+    }
+  }, [userId, router])
 
   async function markAllRead() {
     const ids = items.filter((n) => !n.read_at).map((n) => n.id)
@@ -45,15 +110,18 @@ export function NotificationsPanel({ initial }: { initial: Notification[] }) {
           {unread > 0 && <span className="tag good">{unread} new</span>}
         </h3>
         {unread > 0 && (
-          <button className="btn btn-ghost" onClick={markAllRead}>
+          <button type="button" className="btn btn-ghost" onClick={markAllRead}>
             <Check size={15} /> Mark all read
           </button>
         )}
       </div>
 
-      <div style={{ marginTop: 6 }}>
+      <div style={{ marginTop: 6 }} aria-live="polite">
         {items.slice(0, 8).map((n) => (
-          <div key={n.id} className="list-row notif-row">
+          <div
+            key={n.id}
+            className={`list-row notif-row${liveIds.has(n.id) ? ' notif-new' : ''}`}
+          >
             <div>
               <strong style={{ fontWeight: n.read_at ? 500 : 700 }}>
                 {!n.read_at && <span className="notif-dot" aria-hidden="true" />}
