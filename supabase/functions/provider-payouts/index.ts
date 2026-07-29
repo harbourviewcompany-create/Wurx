@@ -1,12 +1,12 @@
 // Stripe Connect onboarding + payout status for providers (verify_jwt = true).
 //
-// provider_earnings has been accruing rows with nowhere to send the money:
-// there was no Connect account, no onboarding link, no transfers. This creates
-// (or reuses) an Express connected account for the calling provider and returns
-// an onboarding link; `action: "status"` reports whether payouts are enabled.
+// Supports:
+//   action: "account_session" — in-app embedded onboarding (preferred)
+//   action: "onboard"         — legacy hosted Account Link (redirect)
+//   action: "status"          — refresh payouts_enabled from Stripe
+//   action: "admin_payout"    — release accrued earnings via Transfer
 //
-// Stripe key comes from Supabase Vault via the service-role-only
-// public.get_app_secret RPC.
+// Stripe key comes from Supabase Vault via public.get_app_secret.
 import Stripe from 'npm:stripe@^17'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
@@ -38,6 +38,32 @@ async function getStripeKey(): Promise<string | null> {
   return (data as string) ?? null
 }
 
+async function ensureConnectedAccount(
+  stripe: Stripe,
+  provider: { id: string; business_name: string | null; stripe_account_id: string | null },
+  userId: string,
+  email: string | undefined,
+): Promise<string> {
+  if (provider.stripe_account_id) return provider.stripe_account_id
+
+  const account = await stripe.accounts.create({
+    type: 'express',
+    country: 'CA',
+    email,
+    business_type: 'individual',
+    capabilities: { transfers: { requested: true } },
+    business_profile: { name: provider.business_name ?? undefined },
+    metadata: { wurx_provider_id: provider.id, supabase_user_id: userId },
+  })
+
+  await supabase
+    .from('providers')
+    .update({ stripe_account_id: account.id })
+    .eq('id', provider.id)
+
+  return account.id
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -48,15 +74,10 @@ Deno.serve(async (req: Request) => {
     const userId = userData.user.id
 
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
-    const action = body?.action ?? 'onboard'
+    const action = body?.action ?? 'account_session'
     const siteUrl = Deno.env.get('SITE_URL') || 'https://wurx.vercel.app'
 
-    // ---- admin_payout: release accrued unpaid earnings to a provider ---
-    // Caller must be an admin; target provider comes from the request body
-    // (not derived from the caller's own provider row, since the caller
-    // here is the admin, not the provider being paid). Handled before the
-    // "caller must be a registered provider" gate below, since an admin
-    // releasing payouts has no reason to be a provider themselves.
+    // ---- admin_payout -------------------------------------------------
     if (action === 'admin_payout') {
       const { data: callerProfile } = await supabase
         .from('profiles')
@@ -92,9 +113,6 @@ Deno.serve(async (req: Request) => {
       if (!stripeKey) return json({ error: 'Payouts are not configured' }, 500)
       const stripe = new Stripe(stripeKey)
 
-      // Money moves first. Only once Stripe confirms the transfer do we
-      // touch the database — marking earnings paid before the transfer
-      // actually succeeded would be the wrong failure mode to risk.
       const transfer = await stripe.transfers.create({
         amount: amountCents,
         currency: 'cad',
@@ -114,16 +132,16 @@ Deno.serve(async (req: Request) => {
         .single()
 
       if (payoutErr || !payout) {
-        // The transfer already went through on Stripe's side at this point.
-        // Logging loudly rather than silently losing the reconciliation
-        // trail - this needs a human to match transfer.id back to the
-        // provider by hand if it happens.
         console.error(
           `Transfer ${transfer.id} succeeded for provider ${targetProviderId} but recording it failed:`,
           payoutErr?.message,
         )
         return json(
-          { error: 'Transfer succeeded but recording it failed - contact support with transfer ' + transfer.id },
+          {
+            error:
+              'Transfer succeeded but recording it failed - contact support with transfer ' +
+              transfer.id,
+          },
           500,
         )
       }
@@ -137,8 +155,7 @@ Deno.serve(async (req: Request) => {
       return json({ paid: true, amountCents, transferId: transfer.id })
     }
 
-    // Every other action (onboard / status) is the provider managing their
-    // own payouts, so it's gated on the caller actually being one.
+    // Provider-scoped actions
     const { data: provider } = await supabase
       .from('providers')
       .select('id, business_name, stripe_account_id, payouts_enabled, verification')
@@ -153,15 +170,13 @@ Deno.serve(async (req: Request) => {
 
     let accountId: string | null = provider.stripe_account_id
 
-    // ---- status: refresh payouts_enabled from Stripe -----------------
+    // ---- status -------------------------------------------------------
     if (action === 'status') {
       if (!accountId) return json({ payouts_enabled: false, onboarded: false })
       const account = await stripe.accounts.retrieve(accountId)
       const enabled = !!account.payouts_enabled
 
       if (enabled !== provider.payouts_enabled) {
-        // payouts_enabled is guarded against provider self-edits, so this
-        // service-role write is the only path that can set it.
         await supabase
           .from('providers')
           .update({ payouts_enabled: enabled })
@@ -175,39 +190,56 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    // ---- onboard: create account if needed, return an onboarding link --
-    if (!accountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        country: 'CA',
-        email: userData.user.email,
-        business_type: 'individual',
-        capabilities: { transfers: { requested: true } },
-        business_profile: { name: provider.business_name },
-        metadata: { wurx_provider_id: provider.id, supabase_user_id: userId },
-      })
-      accountId = account.id
+    // ---- account_session: embedded onboarding (in-app) ---------------
+    if (action === 'account_session') {
+      accountId = await ensureConnectedAccount(
+        stripe,
+        provider,
+        userId,
+        userData.user.email,
+      )
 
-      await supabase
-        .from('providers')
-        .update({ stripe_account_id: accountId })
-        .eq('id', provider.id)
+      const session = await stripe.accountSessions.create({
+        account: accountId,
+        components: {
+          account_onboarding: {
+            enabled: true,
+            features: {
+              external_account_collection: true,
+            },
+          },
+          // Optional: show a banner later if Stripe needs more docs
+          notification_banner: {
+            enabled: true,
+          },
+        },
+      })
+
+      return json({ clientSecret: session.client_secret, accountId })
     }
 
-    const link = await stripe.accountLinks.create({
-      account: accountId,
-      refresh_url: `${siteUrl}/provider/dashboard?payouts=refresh`,
-      return_url: `${siteUrl}/provider/dashboard?payouts=done`,
-      type: 'account_onboarding',
-    })
+    // ---- onboard: legacy hosted Account Link -------------------------
+    if (action === 'onboard') {
+      accountId = await ensureConnectedAccount(
+        stripe,
+        provider,
+        userId,
+        userData.user.email,
+      )
 
-    return json({ url: link.url })
+      const link = await stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: `${siteUrl}/provider/dashboard?payouts=refresh`,
+        return_url: `${siteUrl}/provider/dashboard?payouts=done`,
+        type: 'account_onboarding',
+      })
+
+      return json({ url: link.url })
+    }
+
+    return json({ error: `Unknown action: ${action}` }, 400)
   } catch (error) {
     console.error('provider-payouts error:', error)
-    // Stripe errors here are almost always platform-side (Connect not
-    // enabled yet, a key missing a permission, etc.) -- nothing the
-    // provider can act on. Show them something calm instead of Stripe's
-    // internal wording; the real detail is in the log line above.
     const message =
       error instanceof Stripe.errors.StripeError
         ? "Payouts aren't available yet -- we're finishing setup on our end. Check back soon."

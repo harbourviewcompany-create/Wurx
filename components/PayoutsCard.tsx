@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Banknote, ExternalLink } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { FunctionsHttpError } from '@supabase/supabase-js'
+import { useRouter } from 'next/navigation'
+import { Banknote } from 'lucide-react'
 import { formatPrice } from '@/lib/format'
+import { EmbeddedPayoutOnboarding } from '@/components/EmbeddedPayoutOnboarding'
 
 /**
- * Stripe Connect onboarding + earnings summary for a provider. Until this
- * existed, provider_earnings accrued with no way for a pro to ever be paid.
+ * Stripe Connect onboarding + earnings summary for a provider.
+ * Onboarding is embedded in Wurx (no redirect to Stripe's site).
  */
 export function PayoutsCard({
   payoutsEnabled,
@@ -21,35 +21,12 @@ export function PayoutsCard({
   pendingCents: number
   paidCents: number
 }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
-  async function onboard() {
-    setError(null)
-    setLoading(true)
-    try {
-      const supabase = createClient()
-      const { data, error: fnError } = await supabase.functions.invoke<{
-        url?: string
-        error?: string
-      }>('provider-payouts', { body: { action: 'onboard' } })
-
-      if (fnError) {
-        let message = fnError.message
-        if (fnError instanceof FunctionsHttpError) {
-          const body = await fnError.context.json().catch(() => null)
-          if (body?.error) message = body.error
-        }
-        throw new Error(message)
-      }
-      if (data?.error) throw new Error(data.error)
-      if (!data?.url) throw new Error('Could not start payout setup.')
-
-      window.location.href = data.url
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.')
-      setLoading(false)
-    }
+  function handleComplete() {
+    setShowOnboarding(false)
+    router.refresh()
   }
 
   return (
@@ -78,29 +55,28 @@ export function PayoutsCard({
         </div>
       </div>
 
-      {!payoutsEnabled && (
+      {!payoutsEnabled && !showOnboarding && (
         <>
           <p className="muted" style={{ marginTop: 14 }}>
             {hasAccount
-              ? 'Your payout setup is incomplete — finish it to get paid for completed jobs.'
-              : 'Set up payouts to receive money for the jobs you complete. Takes about two minutes.'}
+              ? 'Your payout setup is incomplete — finish it here to get paid for completed jobs.'
+              : 'Set up payouts to receive money for the jobs you complete. Takes about two minutes, right here on Wurx.'}
           </p>
           <button
             className="btn btn-primary"
-            onClick={onboard}
-            disabled={loading}
+            onClick={() => setShowOnboarding(true)}
             style={{ marginTop: 10 }}
           >
-            {loading ? 'Opening…' : hasAccount ? 'Finish payout setup' : 'Set up payouts'}
-            <ExternalLink size={15} />
+            {hasAccount ? 'Finish payout setup' : 'Set up payouts'}
           </button>
         </>
       )}
 
-      {error && (
-        <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
-          {error}
-        </p>
+      {showOnboarding && (
+        <EmbeddedPayoutOnboarding
+          onComplete={handleComplete}
+          onCancel={() => setShowOnboarding(false)}
+        />
       )}
     </div>
   )
