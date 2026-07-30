@@ -29,7 +29,9 @@ jobs:
       DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        persist-credentials: false
 
     # Skip cleanly when Datadog credentials are not configured, instead of
     # failing every pull request. Add DD_API_KEY / DD_APP_KEY repository secrets
