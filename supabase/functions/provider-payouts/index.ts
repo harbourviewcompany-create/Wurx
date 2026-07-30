@@ -56,10 +56,19 @@ async function ensureConnectedAccount(
     metadata: { wurx_provider_id: provider.id, supabase_user_id: userId },
   })
 
-  await supabase
+  const { error: persistErr } = await supabase
     .from('providers')
     .update({ stripe_account_id: account.id })
     .eq('id', provider.id)
+
+  if (persistErr) {
+    // Account already exists on Stripe — return it so the pro can continue,
+    // but log loudly so a human can reconcile if the row stays null.
+    console.error(
+      `Created Stripe account ${account.id} for provider ${provider.id} but failed to persist stripe_account_id:`,
+      persistErr.message,
+    )
+  }
 
   return account.id
 }
@@ -208,7 +217,6 @@ Deno.serve(async (req: Request) => {
               external_account_collection: true,
             },
           },
-          // Optional: show a banner later if Stripe needs more docs
           notification_banner: {
             enabled: true,
           },
