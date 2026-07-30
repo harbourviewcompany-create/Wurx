@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { ServiceBrowser } from '@/components/ServiceBrowser'
 import { formatMinutes } from '@/lib/format'
+import { dedupeRecentProviders } from '@/lib/booking'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export default async function BookPage({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard/book')
 
-  const [servicesRes, balanceRes, profileRes] = await Promise.all([
+  const [servicesRes, balanceRes, profileRes, pastProvidersRes] = await Promise.all([
     supabase
       .from('services')
       .select(
@@ -46,6 +47,18 @@ export default async function BookPage({
       .select('address_line1, city, postal_code')
       .eq('id', user.id)
       .single(),
+    // Pros this customer has actually had on site. request_booking enforces the
+    // same rule server-side, so this is the presentation half of one constraint.
+    supabase
+      .from('bookings')
+      // providers!provider_id disambiguates: bookings has two FKs to providers
+      // (provider_id and the new preferred_provider_id).
+      .select('provider_id, providers!provider_id(id, business_name, rating, service_slugs)')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .not('provider_id', 'is', null)
+      .order('scheduled_start', { ascending: false })
+      .limit(50),
   ])
 
   const available = balanceRes.data?.available_minutes ?? 0
@@ -56,6 +69,24 @@ export default async function BookPage({
     ...s,
     credit_multiplier: Number(s.credit_multiplier),
   }))
+
+  const pastProviders = dedupeRecentProviders(
+    (pastProvidersRes.data ?? []).map((row) => {
+      const p = row.providers as {
+        id: string
+        business_name: string | null
+        rating: number | null
+        service_slugs: string[] | null
+      } | null
+      if (!p) return null
+      return {
+        id: p.id,
+        business_name: p.business_name ?? 'Your pro',
+        rating: p.rating,
+        service_slugs: p.service_slugs ?? [],
+      }
+    }),
+  )
 
   return (
     <section className="container section">
@@ -103,6 +134,7 @@ export default async function BookPage({
           }}
           initialServiceSlug={serviceSlug ?? null}
           initialDurationMinutes={durationOk}
+          pastProviders={pastProviders}
         />
       </div>
     </section>

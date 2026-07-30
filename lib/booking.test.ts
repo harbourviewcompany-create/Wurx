@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { affordability, earningsSplit, serviceCostMinutes } from './booking'
+import {
+  affordability,
+  dedupeRecentProviders,
+  earningsSplit,
+  providersForService,
+  serviceCostMinutes,
+} from './booking'
 import { formatMinutes, formatPrice } from './format'
 
 describe('serviceCostMinutes', () => {
@@ -99,6 +105,43 @@ describe('earningsSplit', () => {
       const s = earningsSplit(mins, rate, bps)
       expect(s.feeCents + s.netCents).toBe(s.grossCents)
     }
+  })
+})
+
+describe('repeat-booking pro picker', () => {
+  const pro = (id: string, slugs: string[] = ['home-cleaning']) => ({
+    id,
+    business_name: `Pro ${id}`,
+    rating: null,
+    service_slugs: slugs,
+  })
+
+  it('keeps one entry per pro, most recently used first', () => {
+    // Rows arrive newest-first, and a repeat customer books the same pro often.
+    const rows = [pro('b'), pro('a'), pro('b'), pro('c'), pro('a')]
+    expect(dedupeRecentProviders(rows).map((p) => p.id)).toEqual(['b', 'a', 'c'])
+  })
+
+  it('drops pros whose row came back null', () => {
+    // A null embed means deactivated or unverified — RLS hid them, and
+    // request_booking would reject them, so they must not be offered.
+    const rows = [pro('a'), null, undefined, pro('b')]
+    expect(dedupeRecentProviders(rows).map((p) => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('offers only pros who cover the chosen service', () => {
+    const pros = [pro('a', ['home-cleaning']), pro('b', ['snow-removal', 'home-cleaning'])]
+    expect(providersForService(pros, 'snow-removal').map((p) => p.id)).toEqual(['b'])
+    expect(providersForService(pros, 'home-cleaning').map((p) => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('offers nobody before a service is chosen', () => {
+    expect(providersForService([pro('a')], null)).toEqual([])
+    expect(providersForService([pro('a')], undefined)).toEqual([])
+  })
+
+  it('offers nobody when no past pro covers the service', () => {
+    expect(providersForService([pro('a', ['handyman'])], 'lawn-garden')).toEqual([])
   })
 })
 
