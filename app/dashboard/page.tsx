@@ -79,7 +79,9 @@ export default async function Dashboard({
     supabase
       .from('bookings')
       .select(
-        'id, status, scheduled_start, window_end, duration_minutes, address_line1, city, postal_code, services(name, icon, slug), providers(id, business_name, rating)',
+        // providers!provider_id: bookings now has two FKs to providers
+        // (provider_id and preferred_provider_id), so the embed must say which.
+        'id, status, scheduled_start, window_end, duration_minutes, address_line1, city, postal_code, services(name, icon, slug), providers!provider_id(id, business_name, rating)',
       )
       .eq('user_id', user.id)
       .order('scheduled_start', { ascending: false })
