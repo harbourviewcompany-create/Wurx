@@ -18,6 +18,33 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [needsConfirm, setNeedsConfirm] = useState(false)
+  const [resent, setResent] = useState(false)
+  const [resending, setResending] = useState(false)
+
+  function confirmRedirectTo() {
+    if (typeof window === 'undefined') return undefined
+    if (!priceId) return `${window.location.origin}/auth/callback`
+    return `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      `/pricing?plan=${planSlug ?? ''}&priceId=${priceId}`,
+    )}`
+  }
+
+  async function resendConfirmation() {
+    setError(null)
+    setResending(true)
+    const supabase = createClient()
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: confirmRedirectTo() },
+    })
+    setResending(false)
+    if (resendError) {
+      setError(resendError.message)
+      return
+    }
+    setResent(true)
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -29,16 +56,7 @@ function SignupForm() {
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback${
-                priceId
-                  ? `?next=${encodeURIComponent(
-                      `/pricing?plan=${planSlug ?? ''}&priceId=${priceId}`,
-                    )}`
-                  : ''
-              }`
-            : undefined,
+        emailRedirectTo: confirmRedirectTo(),
       },
     })
 
@@ -92,15 +110,26 @@ function SignupForm() {
           <p className="muted">
             We sent a confirmation link to <strong>{email}</strong>. Click it to
             finish creating your account, then log in
-            {priceId ? ' — we\'ll continue to checkout for your plan' : ''}.
+            {priceId ? " — we'll continue to checkout for your plan" : ''}.
           </p>
-          <Link
-            href={loginHref}
-            className="btn btn-primary"
-            style={{ marginTop: 12 }}
-          >
-            Go to log in
-          </Link>
+          {error && <div className="form-error">{error}</div>}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+            <Link href={loginHref} className="btn btn-primary">
+              Go to log in
+            </Link>
+            <button
+              type="button"
+              className="btn"
+              onClick={resendConfirmation}
+              disabled={resending || resent}
+            >
+              {resent ? 'Email resent' : resending ? 'Sending…' : 'Resend email'}
+            </button>
+          </div>
+          <p className="form-note">
+            Nothing after a minute? Check spam, or resend — links expire after 24
+            hours.
+          </p>
         </div>
       </div>
     )
