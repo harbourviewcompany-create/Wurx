@@ -18,7 +18,12 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMinutes, formatPostalCode, postalFsa } from '@/lib/format'
-import { affordability, serviceCostMinutes } from '@/lib/booking'
+import {
+  affordability,
+  providersForService,
+  serviceCostMinutes,
+  type RepeatProvider,
+} from '@/lib/booking'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
 export type BrowsableService = {
@@ -31,6 +36,9 @@ export type BrowsableService = {
   credit_multiplier: number
   requires_licensed_provider: boolean
 }
+
+/** A pro the customer has already had on site, offerable for a repeat booking. */
+export type PastProvider = RepeatProvider
 
 type Filter = 'all' | 'quick' | 'licensed'
 
@@ -106,6 +114,7 @@ export function ServiceBrowser({
   defaults,
   initialServiceSlug = null,
   initialDurationMinutes,
+  pastProviders = [],
 }: {
   services: BrowsableService[]
   availableMinutes: number
@@ -113,6 +122,7 @@ export function ServiceBrowser({
   defaults: { address_line1: string; city: string; postal_code: string }
   initialServiceSlug?: string | null
   initialDurationMinutes?: number
+  pastProviders?: PastProvider[]
 }) {
   const router = useRouter()
   const searchRef = useRef<HTMLInputElement>(null)
@@ -132,6 +142,7 @@ export function ServiceBrowser({
   const [city, setCity] = useState(defaults.city)
   const [postal, setPostal] = useState(defaults.postal_code)
   const [notes, setNotes] = useState('')
+  const [preferredProviderId, setPreferredProviderId] = useState<string | null>(null)
   const [editAddress, setEditAddress] = useState(!hasSavedAddress(defaults))
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -243,6 +254,20 @@ export function ServiceBrowser({
     return Array.from(set).sort((a, b) => a - b)
   }, [selected])
 
+  // Only pros who actually cover the chosen service. Offering one who doesn't
+  // would look like a choice but silently fall through to an open fan-out,
+  // since dispatch skips a favourite who can't serve the job.
+  const eligibleProviders = useMemo(
+    () => providersForService(pastProviders, selected?.slug),
+    [pastProviders, selected],
+  )
+
+  useEffect(() => {
+    if (preferredProviderId && !eligibleProviders.some((p) => p.id === preferredProviderId)) {
+      setPreferredProviderId(null)
+    }
+  }, [eligibleProviders, preferredProviderId])
+
   const dayOptions = [0, 1, 2, 3].filter((d) => {
     // keep at least one window in the future for this day
     return WINDOWS.some((w) => new Date(windowStartIso(d, w.hour)).getTime() > Date.now() + 45 * 60 * 1000)
@@ -279,6 +304,7 @@ export function ServiceBrowser({
       p_postal_code: postalNorm,
       p_notes: notes,
       p_window_end: endIso,
+      p_preferred_provider_id: preferredProviderId,
     })
 
     if (rpcError) {
@@ -480,6 +506,45 @@ export function ServiceBrowser({
             placeholder="Gate code, pets, parking, key under the mat…"
             aria-label="Notes for the pro"
           />
+
+          {eligibleProviders.length > 0 && (
+            <>
+              <p className="tile-label" style={{ marginTop: 22 }}>
+                Want the same pro?{' '}
+                <span
+                  className="muted"
+                  style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}
+                >
+                  (optional)
+                </span>
+              </p>
+              <div className="chip-row" style={{ marginBottom: 8 }}>
+                <button
+                  type="button"
+                  className={`chip${preferredProviderId === null ? ' chip-on' : ''}`}
+                  onClick={() => setPreferredProviderId(null)}
+                >
+                  First available
+                </button>
+                {eligibleProviders.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`chip${preferredProviderId === p.id ? ' chip-on' : ''}`}
+                    onClick={() => setPreferredProviderId(p.id)}
+                  >
+                    {p.business_name}
+                    {p.rating != null && ` · ★ ${p.rating.toFixed(1)}`}
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: '0 0 8px', fontSize: 13 }}>
+                {preferredProviderId
+                  ? 'They get first refusal. If they’re not free, we open it to other vetted pros so your job still gets done.'
+                  : 'We’ll match you with the first vetted pro who takes the job.'}
+              </p>
+            </>
+          )}
 
           <div className="cost-summary">
             <div>

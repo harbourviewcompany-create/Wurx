@@ -21,6 +21,7 @@ export type Database = {
           id: string
           notes: string | null
           postal_code: string | null
+          preferred_provider_id: string | null
           provider_id: string | null
           scheduled_start: string
           service_id: string
@@ -37,6 +38,7 @@ export type Database = {
           id?: string
           notes?: string | null
           postal_code?: string | null
+          preferred_provider_id?: string | null
           provider_id?: string | null
           scheduled_start: string
           service_id: string
@@ -53,6 +55,7 @@ export type Database = {
           id?: string
           notes?: string | null
           postal_code?: string | null
+          preferred_provider_id?: string | null
           provider_id?: string | null
           scheduled_start?: string
           service_id?: string
@@ -62,6 +65,8 @@ export type Database = {
           window_end?: string | null
         }
         Relationships: [
+          { foreignKeyName: "bookings_preferred_provider_id_fkey"; columns: ["preferred_provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
+          { foreignKeyName: "bookings_preferred_provider_id_fkey"; columns: ["preferred_provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
           { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "dispatchable_providers"; referencedColumns: ["id"] },
           { foreignKeyName: "bookings_provider_id_fkey"; columns: ["provider_id"]; isOneToOne: false; referencedRelation: "providers"; referencedColumns: ["id"] },
           { foreignKeyName: "bookings_service_id_fkey"; columns: ["service_id"]; isOneToOne: false; referencedRelation: "services"; referencedColumns: ["id"] },
@@ -847,6 +852,10 @@ export type Database = {
         Args: { p_booking_id: string; p_provider_id: string }
         Returns: boolean
       }
+      booking_reserved_for_other: {
+        Args: { p_booking_id: string; p_provider_id: string }
+        Returns: boolean
+      }
       release_booking: { Args: { p_booking_id: string }; Returns: undefined }
       request_booking: {
         Args: {
@@ -855,6 +864,7 @@ export type Database = {
           p_duration_minutes: number
           p_notes: string
           p_postal_code: string
+          p_preferred_provider_id?: string | null
           p_scheduled_start: string
           p_service_id: string
           p_window_end?: string
