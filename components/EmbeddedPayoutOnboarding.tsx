@@ -38,10 +38,18 @@ export function EmbeddedPayoutOnboarding({
         const body = await fnError.context.json().catch(() => null)
         if (body?.error) message = body.error
       }
+      setError(message)
       throw new Error(message)
     }
-    if (data?.error) throw new Error(data.error)
-    if (!data?.clientSecret) throw new Error('Could not start payout setup.')
+    if (data?.error) {
+      setError(data.error)
+      throw new Error(data.error)
+    }
+    if (!data?.clientSecret) {
+      const message = 'Could not start payout setup.'
+      setError(message)
+      throw new Error(message)
+    }
     return data.clientSecret
   }, [])
 
@@ -128,7 +136,15 @@ export function EmbeddedPayoutOnboarding({
         security and bank connections.
       </p>
       <ConnectComponentsProvider connectInstance={connectInstance}>
-        <ConnectAccountOnboarding onExit={handleExit} />
+        <ConnectAccountOnboarding
+          onExit={handleExit}
+          onLoadError={({ error: loadError }) => {
+            setError(
+              loadError?.message ??
+                'Could not load secure payout setup. Please try again.',
+            )
+          }}
+        />
       </ConnectComponentsProvider>
     </div>
   )
