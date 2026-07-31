@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test'
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000'
 const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL)
 
-const viewports = [
+const chromeViewports = [
   ['320', 320, 820],
   ['360', 360, 860],
   ['375', 375, 900],
@@ -15,12 +15,25 @@ const viewports = [
   ['1440', 1440, 1000],
 ]
 
+const webkitViewports = [
+  ['390', 390, 920],
+  ['820', 820, 1080],
+  ['1440', 1440, 1000],
+]
+
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.pw.mjs',
   outputDir: 'artifacts/playwright-results',
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  snapshotPathTemplate: '{testDir}/__screenshots__/{projectName}/{testFilePath}/{arg}{ext}',
+  timeout: 75_000,
+  expect: {
+    timeout: 12_000,
+    toHaveScreenshot: {
+      animations: 'disabled',
+      maxDiffPixelRatio: 0.005,
+    },
+  },
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -39,15 +52,29 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: viewports.map(([name, width, height]) => ({
-    name: `viewport-${name}`,
-    use: {
-      viewport: { width, height },
-      deviceScaleFactor: 1,
-      isMobile: width <= 430,
-      hasTouch: width <= 430,
-    },
-  })),
+  projects: [
+    ...chromeViewports.map(([name, width, height]) => ({
+      name: `chrome-${name}`,
+      use: {
+        browserName: 'chromium',
+        channel: 'chrome',
+        viewport: { width, height },
+        deviceScaleFactor: 1,
+        isMobile: width <= 430,
+        hasTouch: width <= 430,
+      },
+    })),
+    ...webkitViewports.map(([name, width, height]) => ({
+      name: `webkit-${name}`,
+      use: {
+        browserName: 'webkit',
+        viewport: { width, height },
+        deviceScaleFactor: 1,
+        isMobile: width <= 430,
+        hasTouch: width <= 430,
+      },
+    })),
+  ],
   webServer: externalServer
     ? undefined
     : {
