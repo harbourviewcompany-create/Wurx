@@ -12,8 +12,8 @@ import {
 /**
  * Starts a Stripe Checkout session for a subscription plan by invoking the
  * `create-checkout` Supabase Edge Function. The function looks the plan up
- * server-side by its Stripe price id, so we never trust a client-supplied
- * amount here — we only pass the price id.
+ * server-side by its Stripe price id and derives the customer from the verified
+ * JWT, so the browser cannot select an account or commercial entitlement.
  *
  * Unauthenticated users are sent to signup (preferred) with priceId preserved
  * so they land on Stripe after creating an account without re-picking a plan.
@@ -51,7 +51,6 @@ export function PlanCheckoutButton({
     )
   }
 
-  // Capture after null guard so nested closures see `string`, not `string | null`.
   const resolvedPriceId: string = priceId
 
   async function subscribe() {
@@ -74,7 +73,7 @@ export function PlanCheckoutButton({
         return
       }
 
-      const url = await startCheckoutSession(supabase, user.id, resolvedPriceId)
+      const url = await startCheckoutSession(supabase, resolvedPriceId)
       window.location.href = url
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
