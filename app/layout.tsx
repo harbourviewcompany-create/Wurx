@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Bricolage_Grotesque, DM_Sans } from 'next/font/google'
 import './globals.css'
 import './wurx-ui.css'
+import './wurx-provider.css'
 import { SiteHeader } from '@/components/SiteHeader'
 
 const bricolage = Bricolage_Grotesque({
