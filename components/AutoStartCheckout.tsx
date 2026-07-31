@@ -32,7 +32,7 @@ export function AutoStartCheckout({
           data: { user },
         } = await supabase.auth.getUser()
         if (!user || cancelled) return
-        const url = await startCheckoutSession(supabase, user.id, priceId)
+        const url = await startCheckoutSession(supabase, priceId)
         if (!cancelled) window.location.href = url
       } catch (e) {
         if (!cancelled) {
@@ -41,7 +41,6 @@ export function AutoStartCheckout({
               ? e.message
               : 'Could not open checkout. Choose a plan below.',
           )
-          // Drop priceId from the URL so refresh does not loop.
           router.replace('/pricing')
         }
       }

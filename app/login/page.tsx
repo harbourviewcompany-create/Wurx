@@ -35,7 +35,7 @@ function LoginForm() {
 
     if (priceId && data.user) {
       try {
-        const url = await startCheckoutSession(supabase, data.user.id, priceId)
+        const url = await startCheckoutSession(supabase, priceId)
         window.location.href = url
         return
       } catch (checkoutErr) {
@@ -65,7 +65,7 @@ function LoginForm() {
         <h2 style={{ marginTop: 0 }}>Log in</h2>
         {priceId && (
           <p className="muted" style={{ marginTop: 0 }}>
-            After you log in, we\'ll open secure checkout for your plan.
+            After you log in, we&apos;ll open secure checkout for your plan.
           </p>
         )}
         <form onSubmit={onSubmit}>

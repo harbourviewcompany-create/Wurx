@@ -24,19 +24,19 @@ export function loginUrlForPlan(priceId: string, planSlug?: string | null) {
 }
 
 /**
- * Invoke create-checkout for the signed-in user. Returns the Stripe Checkout URL.
- * Never trusts a client amount — only a Stripe price id.
+ * Invoke create-checkout for the current signed-in user. The Edge Function
+ * derives that user exclusively from the verified JWT; the browser sends only
+ * the selected Stripe price id.
  */
 export async function startCheckoutSession(
   supabase: SupabaseClient,
-  userId: string,
   priceId: string,
 ): Promise<string> {
   const { data, error: fnError } = await supabase.functions.invoke<{
     url?: string
     error?: string
   }>('create-checkout', {
-    body: { userId, priceId },
+    body: { priceId },
   })
 
   if (fnError) throw new Error(fnError.message)
