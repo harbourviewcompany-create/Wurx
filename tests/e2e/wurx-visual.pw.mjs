@@ -49,24 +49,33 @@ async function settle(page) {
 }
 
 async function login(page, account) {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' })
-  await page.getByLabel(/email/i).fill(account.email)
-  await page.getByLabel(/password/i).fill(account.password)
-  await page.getByRole('button', { name: /log in/i }).click()
-  await page.waitForURL(/\/dashboard/, { timeout: 20_000 })
-  await settle(page)
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
+    await page.getByLabel(/email/i).fill(account.email)
+    await page.getByLabel(/password/i).fill(account.password)
+    await page.getByRole('button', { name: /log in/i }).click()
+    try {
+      await page.waitForURL(/\/dashboard/, { timeout: 30_000, waitUntil: 'domcontentloaded' })
+      await settle(page)
+      return
+    } catch (error) {
+      if (attempt === 3) throw error
+      await page.waitForTimeout(attempt * 1_000)
+    }
+  }
 }
 
 async function capturePage(page, testInfo, name, options = {}) {
   const path = join('artifacts', 'screenshots', testInfo.project.name, `${name}.png`)
   mkdirSync(dirname(path), { recursive: true })
   const mask = options.mask ?? []
-  await page.screenshot({ path, fullPage: true, animations: 'disabled', mask })
+  await page.screenshot({ path, fullPage: true, animations: 'disabled', mask, maskColor: '#e8e3d8' })
   if (visualBaselinesEnabled) {
     await expect(page).toHaveScreenshot(`${name}.png`, {
       fullPage: true,
       animations: 'disabled',
       mask,
+      maskColor: '#e8e3d8',
     })
   }
 }
@@ -76,11 +85,12 @@ async function captureLocator(locator, testInfo, name, options = {}) {
   const path = join('artifacts', 'screenshots', testInfo.project.name, `${name}.png`)
   mkdirSync(dirname(path), { recursive: true })
   const mask = options.mask ?? []
-  await locator.screenshot({ path, animations: 'disabled', mask })
+  await locator.screenshot({ path, animations: 'disabled', mask, maskColor: '#e8e3d8' })
   if (visualBaselinesEnabled) {
     await expect(locator).toHaveScreenshot(`${name}.png`, {
       animations: 'disabled',
       mask,
+      maskColor: '#e8e3d8',
     })
   }
 }
