@@ -8,7 +8,7 @@ import { ManageSubscriptionButton } from '@/components/ManageSubscriptionButton'
 
 export const dynamic = 'force-dynamic'
 
-const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
+const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due'] as const
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
