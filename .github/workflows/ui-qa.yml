@@ -36,9 +36,9 @@ jobs:
 
       - name: Provision ephemeral non-production QA identities
         env:
-          HOMEOWNER_EMAIL: wurx.qa.homeowner.ffeb6967c526@example.com
+          HOMEOWNER_EMAIL: tylercampbell5+wurx-qa-homeowner-ffeb6967c526@outlook.com
           HOMEOWNER_PASSWORD: WqH!10J#G-Cnh6Oe1bqQ1FdD!_Pr#!N0
-          PROFESSIONAL_EMAIL: wurx.qa.professional.e54353c69f70@example.com
+          PROFESSIONAL_EMAIL: tylercampbell5+wurx-qa-professional-e54353c69f70@outlook.com
           PROFESSIONAL_PASSWORD: WqP!e5FBX0fRwQwdFZdhqd76VX9%u51F
         run: |
           python - <<'PY'
