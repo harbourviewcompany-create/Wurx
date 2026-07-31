@@ -16,7 +16,8 @@ const viewports = [
 ]
 
 export default defineConfig({
-  testDir: './tests/ui',
+  testDir: './tests/e2e',
+  testMatch: '**/*.pw.mjs',
   outputDir: 'artifacts/playwright-results',
   timeout: 60_000,
   expect: { timeout: 10_000 },
