@@ -18,7 +18,9 @@ export function HeaderNav({
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
 
-  useEffect(() => setOpen(false), [pathname])
+  useEffect(() => {
+    if (pathname) setOpen(false)
+  }, [pathname])
 
   function current(href: string) {
     return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`))
