@@ -1,0 +1,21 @@
+/* Release-verification corrections that load after the August 2026 design system. */
+
+.chip {
+  min-height: 48px;
+}
+
+.search-mic,
+.search-clear {
+  width: 48px;
+  height: 48px;
+}
+
+.search-clear {
+  right: 60px;
+}
+
+@media (max-width: 430px) {
+  .chip {
+    min-width: 48px;
+  }
+}
