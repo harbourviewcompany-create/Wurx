@@ -1,0 +1,42 @@
+name: PR64 Lockfile Refresh
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/pr64-lock-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/aug-2026-ui-modernization'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Refresh locked dependency graph
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Commit lockfile when changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock.json is current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'chore(deps): refresh lockfile for supported security updates'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
