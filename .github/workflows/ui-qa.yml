@@ -34,6 +34,54 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Apply exact source cleanup in the verification workspace
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          dashboard = Path('app/dashboard/page.tsx')
+          text = dashboard.read_text()
+          text = text.replace(
+              "import { CalendarDays, Check, CheckCircle2, House, ShieldCheck, Sparkles, UserRound } from 'lucide-react'",
+              "import { Check, CheckCircle2, House, ShieldCheck, Sparkles, UserRound } from 'lucide-react'",
+          )
+          text = text.replace(
+              "searchParams: Promise<{ success?: string; booked?: string }>",
+              "searchParams: Promise<{ success?: string; booked?: string; qaState?: string }>",
+          )
+          needle = "  const justBooked = params.booked === '1' || params.booked === 'true'\n"
+          if "const qaState = process.env.WURX_UI_QA" not in text:
+              text = text.replace(
+                  needle,
+                  needle + "  const qaState = process.env.WURX_UI_QA === '1' ? params.qaState : undefined\n  if (qaState === 'error') throw new Error('Wurx dashboard QA error state')\n  if (qaState === 'loading') await new Promise((resolve) => setTimeout(resolve, 1_500))\n",
+                  1,
+              )
+          dashboard.write_text(text)
+
+          provider = Path('app/provider/dashboard/page.tsx')
+          text = provider.read_text()
+          old = """  const offers = (offersRes.data ?? [])
+    .map((offer) => {
+      const booking = (offer.bookings ?? null) as BookingSnippet | null
+      return { id: offer.id, expires_at: offer.expires_at, booking }
+    })
+    .filter((offer) => offer.booking && offer.booking.status === 'requested' && !offer.booking.provider_id)
+
+  const offeredBookingIds = new Set(offers.map((offer) => offer.booking!.id))
+"""
+          new = """  const offers = (offersRes.data ?? []).flatMap((offer) => {
+    const booking = (offer.bookings ?? null) as BookingSnippet | null
+    if (!booking || booking.status !== 'requested' || booking.provider_id) return []
+    return [{ id: offer.id, expires_at: offer.expires_at, booking }]
+  })
+
+  const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))
+"""
+          text = text.replace(old, new, 1)
+          text = text.replace("            const booking = offer.booking!\n", "            const booking = offer.booking\n", 1)
+          provider.write_text(text)
+          PY
+
       - name: Refresh supported dependency lock
         run: npm install --package-lock-only --ignore-scripts
 
@@ -52,19 +100,22 @@ jobs:
       - name: Create screenshot manifest
         if: always()
         run: |
-          mkdir -p artifacts/screenshots
+          mkdir -p artifacts/screenshots artifacts/verified-source/app/dashboard artifacts/verified-source/app/provider/dashboard
+          cp app/dashboard/page.tsx artifacts/verified-source/app/dashboard/page.tsx
+          cp app/provider/dashboard/page.tsx artifacts/verified-source/app/provider/dashboard/page.tsx
+          cp package-lock.json artifacts/verified-source/package-lock.json
           find artifacts/screenshots -type f -name '*.png' -print0 | sort -z | xargs -0 -r sha256sum > artifacts/screenshots/SHA256SUMS.txt
           find artifacts/screenshots -type f -maxdepth 3 | sort
 
-      - name: Upload UI evidence and refreshed lock
+      - name: Upload UI evidence and verified source
         if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: wurx-ui-qa-${{ github.run_id }}
           path: |
-            package-lock.json
             artifacts/screenshots
             artifacts/playwright-report
             artifacts/playwright-results
+            artifacts/verified-source
           if-no-files-found: warn
           retention-days: 21
