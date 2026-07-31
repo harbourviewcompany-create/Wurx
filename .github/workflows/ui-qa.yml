@@ -34,6 +34,34 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Verify authorized QA credentials
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          endpoint = f"{os.environ['NEXT_PUBLIC_SUPABASE_URL']}/auth/v1/token?grant_type=password"
+          headers = {
+              'apikey': os.environ['NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+              'Content-Type': 'application/json',
+          }
+          for email_key, password_key, label in [
+              ('WURX_E2E_HOMEOWNER_EMAIL', 'WURX_E2E_HOMEOWNER_PASSWORD', 'homeowner'),
+              ('WURX_E2E_PROFESSIONAL_EMAIL', 'WURX_E2E_PROFESSIONAL_PASSWORD', 'professional'),
+          ]:
+              payload = json.dumps({
+                  'email': os.environ[email_key],
+                  'password': os.environ[password_key],
+              }).encode()
+              request = urllib.request.Request(endpoint, data=payload, headers=headers, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+                  if not result.get('access_token'):
+                      raise RuntimeError(f'{label} QA authentication did not return an access token')
+                  print(f'{label} QA credentials verified.')
+          PY
+
       - name: Apply exact source cleanup in the verification workspace
         run: |
           python - <<'PY'
