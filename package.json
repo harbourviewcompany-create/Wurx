@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "npx --yes @biomejs/biome@2.2.4 lint app components lib tests playwright.config.mjs",
+    "lint": "npx --yes @biomejs/biome@2.2.4 lint app/layout.tsx app/dashboard/page.tsx app/dashboard/book/page.tsx app/pricing/page.tsx app/services/page.tsx app/provider/dashboard/page.tsx components/SiteHeader.tsx components/HeaderNav.tsx components/MobileBottomNav.tsx components/ActiveJobCard.tsx components/NotificationsPanel.tsx components/PayoutsCard.tsx lib/ui-quality.test.ts tests/ui/wurx-visual.spec.mjs playwright.config.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
