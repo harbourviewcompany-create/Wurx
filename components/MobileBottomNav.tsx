@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import type { LucideIcon } from 'lucide-react'
 import {
   Bell,
   BriefcaseBusiness,
@@ -14,7 +15,14 @@ import {
   Wrench,
 } from 'lucide-react'
 
-const customerItems = [
+type NavigationItem = {
+  href: string
+  label: string
+  icon: LucideIcon
+  primary?: boolean
+}
+
+const customerItems: NavigationItem[] = [
   { href: '/dashboard', label: 'Home', icon: House },
   { href: '/services', label: 'Services', icon: Search },
   { href: '/dashboard/book', label: 'Book', icon: Wrench, primary: true },
@@ -22,7 +30,7 @@ const customerItems = [
   { href: '/dashboard/profile', label: 'Account', icon: UserRound },
 ]
 
-const providerItems = [
+const providerItems: NavigationItem[] = [
   { href: '/provider/dashboard', label: 'Jobs', icon: BriefcaseBusiness },
   { href: '/provider/dashboard#earnings', label: 'Earnings', icon: CircleDollarSign },
   { href: '/provider/dashboard#activity', label: 'Activity', icon: Bell },
