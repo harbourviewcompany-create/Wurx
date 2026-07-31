@@ -11,14 +11,18 @@ permissions:
 jobs:
   responsive-ui:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://rzdavbuoisckvdapbcbj.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz
       NEXT_PUBLIC_SITE_URL: https://wurx.vercel.app
       PLAYWRIGHT_SERVER_COMMAND: npm run start
-      WURX_E2E_EMAIL: ${{ secrets.WURX_E2E_EMAIL }}
-      WURX_E2E_PASSWORD: ${{ secrets.WURX_E2E_PASSWORD }}
+      WURX_UI_QA: '1'
+      WURX_VISUAL_BASELINES: '1'
+      WURX_E2E_HOMEOWNER_EMAIL: ${{ secrets.WURX_E2E_HOMEOWNER_EMAIL }}
+      WURX_E2E_HOMEOWNER_PASSWORD: ${{ secrets.WURX_E2E_HOMEOWNER_PASSWORD }}
+      WURX_E2E_PROFESSIONAL_EMAIL: ${{ secrets.WURX_E2E_PROFESSIONAL_EMAIL }}
+      WURX_E2E_PROFESSIONAL_PASSWORD: ${{ secrets.WURX_E2E_PROFESSIONAL_PASSWORD }}
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -30,24 +34,17 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install locked application dependencies
+      - name: Install locked application and QA dependencies
         run: npm ci
 
-      - name: Install isolated browser QA tooling
-        run: |
-          npm install --prefix .ui-tools --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
-          rm -rf node_modules/@playwright node_modules/@axe-core node_modules/playwright node_modules/playwright-core
-          ln -s "$PWD/.ui-tools/node_modules/@playwright" node_modules/@playwright
-          ln -s "$PWD/.ui-tools/node_modules/@axe-core" node_modules/@axe-core
-          ln -s "$PWD/.ui-tools/node_modules/playwright" node_modules/playwright
-          ln -s "$PWD/.ui-tools/node_modules/playwright-core" node_modules/playwright-core
-          ./.ui-tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Install WebKit runtime dependencies
+        run: npx playwright install --with-deps webkit
 
       - name: Build production application
         run: npm run build
 
-      - name: Capture responsive UI and run accessibility checks
-        run: ./.ui-tools/node_modules/.bin/playwright test
+      - name: Capture responsive UI and compare approved baselines
+        run: npm run test:ui
 
       - name: Create screenshot manifest
         if: always()
