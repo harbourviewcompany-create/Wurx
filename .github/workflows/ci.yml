@@ -43,3 +43,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           NEXT_PUBLIC_SITE_URL: https://wurx.vercel.app
+
+      - name: Upload verified source evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: wurx-ci-source-${{ github.run_id }}
+          path: |
+            app/dashboard/page.tsx
+            app/provider/dashboard/page.tsx
+            package-lock.json
+          retention-days: 7
