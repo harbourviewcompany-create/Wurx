@@ -9,13 +9,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "npx --yes @biomejs/biome@2.2.4 lint app/layout.tsx app/dashboard/page.tsx app/dashboard/book/page.tsx app/pricing/page.tsx app/services/page.tsx app/provider/dashboard/page.tsx components/SiteHeader.tsx components/HeaderNav.tsx components/MobileBottomNav.tsx components/ActiveJobCard.tsx components/NotificationsPanel.tsx components/PayoutsCard.tsx lib/ui-quality.test.ts tests/e2e/wurx-visual.pw.mjs playwright.config.mjs",
+    "lint": "npx --yes @biomejs/biome@2.2.4 lint app components lib tests playwright.config.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "playwright test",
-    "test:ui:install": "npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2 && playwright install chromium",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run build"
+    "test:ui:update": "playwright test --update-snapshots",
+    "test:ui:install": "playwright install --with-deps chromium webkit",
+    "verify": "npm audit --omit=dev --audit-level=high && npm run typecheck && npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "@stripe/connect-js": "^3.3.31",
@@ -23,15 +24,21 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "lucide-react": "^0.469.0",
-    "next": "^16.0.0",
+    "next": "16.2.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.55.0",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.23",
+    "sharp": "0.35.3"
   }
 }
