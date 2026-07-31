@@ -100,7 +100,7 @@ export default async function BookPage({
         </div>
 
         {canBook ? (
-          <div className="plan-balance-strip" aria-label="Current plan-time balance">
+          <div className="plan-balance-strip" role="group" aria-label="Current plan-time balance">
             <div>
               <strong>{formatMinutes(available)}</strong>
               <span>available now</span>
