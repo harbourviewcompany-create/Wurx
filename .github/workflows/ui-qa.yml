@@ -30,19 +30,24 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install application dependencies
+      - name: Install locked application dependencies
         run: npm ci
 
-      - name: Install browser QA tooling
+      - name: Install isolated browser QA tooling
         run: |
-          npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
-          npx playwright install --with-deps chromium
+          npm install --prefix .ui-tools --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+          rm -rf node_modules/@playwright node_modules/@axe-core node_modules/playwright node_modules/playwright-core
+          ln -s "$PWD/.ui-tools/node_modules/@playwright" node_modules/@playwright
+          ln -s "$PWD/.ui-tools/node_modules/@axe-core" node_modules/@axe-core
+          ln -s "$PWD/.ui-tools/node_modules/playwright" node_modules/playwright
+          ln -s "$PWD/.ui-tools/node_modules/playwright-core" node_modules/playwright-core
+          ./.ui-tools/node_modules/.bin/playwright install --with-deps chromium
 
       - name: Build production application
         run: npm run build
 
       - name: Capture responsive UI and run accessibility checks
-        run: npm run test:ui
+        run: ./.ui-tools/node_modules/.bin/playwright test
 
       - name: Create screenshot manifest
         if: always()
