@@ -34,6 +34,9 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Refresh supported dependency lock
+        run: npm install --package-lock-only --ignore-scripts
+
       - name: Install locked application and QA dependencies
         run: npm ci
 
@@ -53,12 +56,13 @@ jobs:
           find artifacts/screenshots -type f -name '*.png' -print0 | sort -z | xargs -0 -r sha256sum > artifacts/screenshots/SHA256SUMS.txt
           find artifacts/screenshots -type f -maxdepth 3 | sort
 
-      - name: Upload UI evidence
+      - name: Upload UI evidence and refreshed lock
         if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: wurx-ui-qa-${{ github.run_id }}
           path: |
+            package-lock.json
             artifacts/screenshots
             artifacts/playwright-report
             artifacts/playwright-results
