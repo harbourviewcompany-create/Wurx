@@ -91,14 +91,14 @@ export default async function PricingPage({
         <p>
           Choose how much household help you want each billing period. Use that service time across cleaning, seasonal work, handyman visits, and other locally available services.
         </p>
-        <div className="plan-proof-row" aria-label="Membership benefits">
-          <span>
+        <div className="plan-proof-row" role="list" aria-label="Membership benefits">
+          <span role="listitem">
             <ShieldCheck size={17} aria-hidden="true" /> Vetted local professionals
           </span>
-          <span>
+          <span role="listitem">
             <Check size={17} aria-hidden="true" /> Exact time shown before booking
           </span>
-          <span>
+          <span role="listitem">
             <Check size={17} aria-hidden="true" /> Manage your plan online
           </span>
         </div>
