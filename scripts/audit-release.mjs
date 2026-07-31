@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+const playwrightAdvisory = 'https://github.com/advisories/GHSA-7mvr-c777-76hp'
 const allowedDevPackages = new Set(['playwright', '@playwright/test'])
 
 function run(command, args) {
@@ -47,20 +48,22 @@ const documentedDevOnly = []
 for (const [name, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
   if (!['high', 'critical'].includes(vulnerability.severity)) continue
 
-  const isDeclaredDevOnly =
+  const urls = advisoryUrls(vulnerability)
+  const isPlaywrightQaToolchain =
     allowedDevPackages.has(name) &&
-    Object.hasOwn(manifest.devDependencies ?? {}, name) &&
-    !Object.hasOwn(manifest.dependencies ?? {}, name)
+    !Object.hasOwn(manifest.dependencies ?? {}, name) &&
+    Object.hasOwn(manifest.devDependencies ?? {}, '@playwright/test') &&
+    (urls.length === 0 || urls.every((url) => url === playwrightAdvisory))
 
-  if (isDeclaredDevOnly) {
-    documentedDevOnly.push({ name, urls: advisoryUrls(vulnerability) })
+  if (isPlaywrightQaToolchain) {
+    documentedDevOnly.push({ name, urls })
     continue
   }
 
   blockers.push({
     name,
     severity: vulnerability.severity,
-    urls: advisoryUrls(vulnerability),
+    urls,
     nodes: vulnerability.nodes,
   })
 }
