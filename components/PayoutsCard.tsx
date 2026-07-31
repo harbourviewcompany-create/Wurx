@@ -6,10 +6,6 @@ import { Banknote } from 'lucide-react'
 import { formatPrice } from '@/lib/format'
 import { EmbeddedPayoutOnboarding } from '@/components/EmbeddedPayoutOnboarding'
 
-/**
- * Stripe Connect onboarding + earnings summary for a provider.
- * Onboarding is embedded in Wurx (no redirect to Stripe's site).
- */
 export function PayoutsCard({
   payoutsEnabled,
   hasAccount,
@@ -30,26 +26,26 @@ export function PayoutsCard({
   }
 
   return (
-    <div className="card">
-      <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
-        <h3 className="card-heading" style={{ margin: 0 }}>
-          <Banknote size={18} /> Earnings
-        </h3>
+    <section id="earnings" className="card earnings-card" aria-labelledby="earnings-heading">
+      <div className="activity-head">
+        <h2 id="earnings-heading" className="card-heading" style={{ margin: 0, fontSize: 23 }}>
+          <Banknote size={20} aria-hidden="true" /> Earnings
+        </h2>
         <span className={payoutsEnabled ? 'tag good' : 'tag warn'}>
-          {payoutsEnabled ? 'Payouts on' : 'Setup needed'}
+          {payoutsEnabled ? 'Payouts ready' : 'Setup required'}
         </span>
       </div>
 
-      <div className="grid grid-2" style={{ gap: 12, marginTop: 12 }}>
+      <div className="grid grid-2" style={{ gap: 16, marginTop: 18 }}>
         <div>
           <p className="tile-label">Awaiting payout</p>
-          <div className="stat" style={{ fontSize: 28 }}>
+          <div className="stat" style={{ fontSize: 34 }}>
             {formatPrice(pendingCents)}
           </div>
         </div>
         <div>
           <p className="tile-label">Paid out</p>
-          <div className="stat" style={{ fontSize: 28 }}>
+          <div className="stat" style={{ fontSize: 34 }}>
             {formatPrice(paidCents)}
           </div>
         </div>
@@ -57,16 +53,16 @@ export function PayoutsCard({
 
       {!payoutsEnabled && !showOnboarding && (
         <>
-          <p className="muted" style={{ marginTop: 14 }}>
+          <p className="muted" style={{ margin: '16px 0 0' }}>
             {hasAccount
-              ? 'Your payout setup is incomplete — finish it here to get paid for completed jobs.'
-              : 'Set up payouts to receive money for the jobs you complete. Takes about two minutes, right here on Wurx.'}
+              ? 'Finish the remaining payout steps before completed-job earnings can be deposited.'
+              : 'Add your identity, bank, and payout information securely inside Wurx. Setup usually takes a few minutes.'}
           </p>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => setShowOnboarding(true)}
-            style={{ marginTop: 10 }}
+            style={{ marginTop: 12 }}
           >
             {hasAccount ? 'Finish payout setup' : 'Set up payouts'}
           </button>
@@ -79,6 +75,6 @@ export function PayoutsCard({
           onCancel={() => setShowOnboarding(false)}
         />
       )}
-    </div>
+    </section>
   )
 }
