@@ -4,6 +4,7 @@ import './globals.css'
 import './wurx-ui.css'
 import './wurx-provider.css'
 import './wurx-states.css'
+import './wurx-release-fixes.css'
 import { SiteHeader } from '@/components/SiteHeader'
 
 const bricolage = Bricolage_Grotesque({
