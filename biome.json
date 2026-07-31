@@ -1,0 +1,29 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "files": {
+    "includes": [
+      "app/**/*.ts",
+      "app/**/*.tsx",
+      "components/**/*.ts",
+      "components/**/*.tsx",
+      "lib/**/*.ts",
+      "tests/**/*.mjs",
+      "playwright.config.mjs"
+    ]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "useUniqueElementIds": "off"
+      },
+      "a11y": {
+        "useSemanticElements": "off"
+      },
+      "performance": {
+        "noImgElement": "off"
+      }
+    }
+  }
+}
