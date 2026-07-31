@@ -1,6 +1,7 @@
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Check, ShieldCheck, Sparkles } from 'lucide-react'
+import { CalendarDays, Check, CheckCircle2, House, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes, formatWindow } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'
@@ -17,15 +18,15 @@ export const dynamic = 'force-dynamic'
 const ACTIVE_SUB_STATUSES = ['trialing', 'active', 'past_due']
 
 const STATUS_LABEL: Record<string, string> = {
-  requested: 'Finding a pro…',
-  confirmed: 'Scheduled',
-  in_progress: 'Pro on the job',
-  completed: 'Done',
+  requested: 'Finding your professional',
+  confirmed: 'Confirmed',
+  in_progress: 'In progress',
+  completed: 'Completed',
   cancelled: 'Cancelled',
 }
 
 const STATUS_TAG: Record<string, string> = {
-  requested: 'tag',
+  requested: 'tag warn',
   confirmed: 'tag good',
   in_progress: 'tag good',
   completed: 'tag good',
@@ -33,17 +34,28 @@ const STATUS_TAG: Record<string, string> = {
 }
 
 const FIRST_JOB_HINTS: { slug: string; label: string; blurb: string }[] = [
-  { slug: 'cleaning', label: 'Home cleaning', blurb: 'Most popular first booking' },
-  { slug: 'snow-removal', label: 'Snow removal', blurb: 'Seasonal — book early' },
-  { slug: 'lawn-care', label: 'Lawn care', blurb: 'Great for spring & summer' },
+  { slug: 'cleaning', label: 'Home cleaning', blurb: 'The easiest first booking' },
+  { slug: 'snow-removal', label: 'Snow removal', blurb: 'Seasonal help when you need it' },
+  { slug: 'lawn-care', label: 'Lawn care', blurb: 'Keep outdoor work handled' },
 ]
 
-function compact(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h <= 0) return `${m}m`
-  if (m === 0) return `${h}h`
-  return `${h}h`
+type DashboardBooking = {
+  id: string
+  status: string
+  scheduled_start: string
+  window_end: string | null
+  duration_minutes: number
+  address_line1: string | null
+  city: string | null
+  postal_code: string | null
+  services: { name: string; icon: string | null; slug: string } | null
+  providers: { id: string; business_name: string; rating: number | null } | null
+}
+
+function bookingPriority(status: string) {
+  if (status === 'in_progress') return 0
+  if (status === 'confirmed') return 1
+  return 2
 }
 
 export default async function Dashboard({
@@ -56,7 +68,6 @@ export default async function Dashboard({
   const justBooked = params.booked === '1' || params.booked === 'true'
 
   const supabase = await createClient()
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -79,8 +90,6 @@ export default async function Dashboard({
     supabase
       .from('bookings')
       .select(
-        // providers!provider_id: bookings now has two FKs to providers
-        // (provider_id and preferred_provider_id), so the embed must say which.
         'id, status, scheduled_start, window_end, duration_minutes, address_line1, city, postal_code, services(name, icon, slug), providers!provider_id(id, business_name, rating)',
       )
       .eq('user_id', user.id)
@@ -100,63 +109,62 @@ export default async function Dashboard({
   const plan = (sub?.plans ?? null) as { name: string; monthly_minutes: number } | null
   const available = balanceRes.data?.available_minutes ?? 0
   const held = balanceRes.data?.held_minutes ?? 0
-  const bookings = bookingsRes.data ?? []
+  const bookings = (bookingsRes.data ?? []) as unknown as DashboardBooking[]
   const notifications = notifRes.data ?? []
   const hasActiveSub = !!sub && ACTIVE_SUB_STATUSES.includes(sub.status)
   const firstName = profile?.full_name?.split(' ')[0]
-  const activeSlugs = new Set((servicesRes.data ?? []).map((s) => s.slug))
-
+  const activeSlugs = new Set((servicesRes.data ?? []).map((service) => service.slug))
   const awaitingMinutes = justPaid && available <= 0
 
   if (!hasActiveSub && !awaitingMinutes) {
     return (
-      <section className="container section">
+      <section className="container section dashboard-shell">
         <div className="activate rise">
           <span className="eyebrow">Welcome{firstName ? `, ${firstName}` : ''}</span>
-          <h1>Let&apos;s get your home handled.</h1>
+          <h1>Let Wurx handle the work around your home.</h1>
           <p>
-            Pick a plan, book your first service, and hand your to-do list to a vetted local pro.
+            Choose a plan once, then book cleaning, seasonal work, repairs, and other local help from one simple account.
           </p>
           <div className="stepper">
             <div className="step">
               <span className="step-num">1</span>
               <div>
-                <b>Choose a plan</b>
-                <small>Sized to how often you need help.</small>
+                <b>Choose your monthly service time</b>
+                <small>Pick the amount of help that fits your household.</small>
               </div>
             </div>
             <div className="step">
               <span className="step-num">2</span>
               <div>
-                <b>Book a service</b>
-                <small>Cleaning, snow, lawn, handyman &amp; more.</small>
+                <b>Book what you need</b>
+                <small>See the exact plan time before you confirm.</small>
               </div>
             </div>
             <div className="step">
               <span className="step-num">3</span>
               <div>
-                <b>Relax</b>
-                <small>A pro shows up and takes care of it.</small>
+                <b>We match a local professional</b>
+                <small>Track the visit and receive updates in Wurx.</small>
               </div>
             </div>
           </div>
           <div className="cta-stack">
-            <Link href="/pricing" className="btn btn-primary btn-lg" style={{ minWidth: 240 }}>
-              Choose your plan
+            <Link href="/pricing" className="btn btn-primary btn-lg">
+              View membership plans
             </Link>
-            <Link href="/dashboard/book" className="link-quiet">
-              or browse what we do first →
+            <Link href="/services" className="link-quiet">
+              Browse services first
             </Link>
           </div>
           <div className="trust-row" style={{ marginTop: 22 }}>
             <span>
-              <ShieldCheck size={16} /> Vetted &amp; insured pros
+              <ShieldCheck size={16} aria-hidden="true" /> Vetted local professionals
             </span>
             <span>
-              <Check size={16} /> No contracts
+              <Check size={16} aria-hidden="true" /> Clear plan-time estimates
             </span>
             <span>
-              <Check size={16} /> Cancel anytime
+              <Check size={16} aria-hidden="true" /> Cancel according to your booking terms
             </span>
           </div>
         </div>
@@ -164,23 +172,12 @@ export default async function Dashboard({
     )
   }
 
-  const monthly = plan?.monthly_minutes ?? 0
-  const frac =
-    monthly > 0
-      ? Math.max(0, Math.min(1, available / monthly))
-      : available > 0
-        ? 1
-        : 0
-  const R = 52
-  const C = 2 * Math.PI * R
-  const dashoffset = C * (1 - frac)
-
-  const completedIds = bookings.filter((b) => b.status === 'completed').map((b) => b.id)
+  const completedIds = bookings.filter((booking) => booking.status === 'completed').map((booking) => booking.id)
   const { data: existingReviews } =
     completedIds.length > 0
       ? await supabase.from('reviews').select('booking_id').in('booking_id', completedIds)
       : { data: [] as { booking_id: string }[] }
-  const reviewedBookingIds = new Set((existingReviews ?? []).map((r) => r.booking_id))
+  const reviewedBookingIds = new Set((existingReviews ?? []).map((review) => review.booking_id))
 
   const { data: photoRows } =
     completedIds.length > 0
@@ -192,11 +189,9 @@ export default async function Dashboard({
 
   const photosByBooking = new Map<string, { url: string; caption: string | null }[]>()
   if (photoRows && photoRows.length > 0) {
-    const paths = photoRows.map((p) => p.storage_path)
-    const { data: signed } = await supabase.storage
-      .from('job-photos')
-      .createSignedUrls(paths, 3600)
-    const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]))
+    const paths = photoRows.map((photo) => photo.storage_path)
+    const { data: signed } = await supabase.storage.from('job-photos').createSignedUrls(paths, 3600)
+    const urlByPath = new Map((signed ?? []).map((item) => [item.path, item.signedUrl]))
     for (const row of photoRows) {
       const url = urlByPath.get(row.storage_path)
       if (!url) continue
@@ -206,164 +201,138 @@ export default async function Dashboard({
     }
   }
 
-  const firstJobHints = FIRST_JOB_HINTS.filter((h) => activeSlugs.has(h.slug))
+  const firstJobHints = FIRST_JOB_HINTS.filter((hint) => activeSlugs.has(hint.slug))
   const showFirstJobGuide = bookings.length === 0 && available > 0
-
-  const activeJob =
-    bookings.find((b) => b.status === 'in_progress') ??
-    bookings.find((b) => b.status === 'confirmed')
-
-  const lastCompleted = bookings.find((b) => b.status === 'completed')
-  const lastService = lastCompleted
-    ? ((lastCompleted.services ?? null) as { name: string; icon: string | null; slug: string } | null)
-    : null
+  const nextBooking = bookings
+    .filter((booking) => ['requested', 'confirmed', 'in_progress'].includes(booking.status))
+    .sort((a, b) => {
+      const priority = bookingPriority(a.status) - bookingPriority(b.status)
+      return priority || new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+    })[0]
+  const lastCompleted = bookings.find((booking) => booking.status === 'completed')
+  const totalTracked = available + held
+  const availablePercent = totalTracked > 0 ? Math.round((available / totalTracked) * 100) : 0
+  const balanceStyle = {
+    '--balance-percent': `${Math.max(0, Math.min(100, availablePercent))}%`,
+  } as CSSProperties
 
   return (
-    <section className="container section">
+    <section className="container section dashboard-shell">
       <MinutesArriving active={awaitingMinutes} />
 
       {justBooked && (
-        <div
-          className="card rise"
-          role="status"
-          style={{
-            marginBottom: 18,
-            borderColor: 'var(--brand)',
-            background: 'color-mix(in srgb, var(--brand) 6%, transparent)',
-          }}
-        >
-          <p style={{ margin: 0, fontWeight: 600 }}>Booking requested</p>
-          <p className="muted" style={{ margin: '6px 0 0' }}>
-            We’re matching a vetted pro for your window. We’ll notify you when they’re assigned — and
-            text when they’re on the way{profile?.phone ? '' : ' (add a phone in Profile for SMS)'}.
-          </p>
+        <div className="card dashboard-success rise" role="status">
+          <CheckCircle2 size={22} aria-hidden="true" />
+          <div>
+            <strong>Booking requested</strong>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Wurx is matching a vetted local professional for your arrival window. You will be notified when the visit is confirmed.
+              {!profile?.phone && ' Add a phone number in Account to receive on-the-way texts.'}
+            </p>
+          </div>
         </div>
       )}
 
-      <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
-        <h1 style={{ margin: 0 }}>Welcome{firstName ? `, ${firstName}` : ''}</h1>
+      <header className="dashboard-header">
+        <div>
+          <p className="dashboard-kicker">Your home</p>
+          <h1 className="dashboard-title">Welcome{firstName ? `, ${firstName}` : ''}</h1>
+        </div>
         <Link href="/dashboard/book" className="btn btn-primary btn-lg">
           Book a service
         </Link>
-      </div>
+      </header>
 
-      {activeJob && (
-        <ActiveJobCard
-          booking={{
-            id: activeJob.id,
-            status: activeJob.status,
-            scheduled_start: activeJob.scheduled_start,
-            window_end: (activeJob as { window_end?: string | null }).window_end,
-            duration_minutes: activeJob.duration_minutes,
-            address_line1: (activeJob as { address_line1?: string | null }).address_line1,
-            city: (activeJob as { city?: string | null }).city,
-            postal_code: (activeJob as { postal_code?: string | null }).postal_code,
-            services: (activeJob.services ?? null) as { name: string; slug: string } | null,
-            providers: (activeJob.providers ?? null) as {
-              business_name: string
-              rating: number | null
-            } | null,
-          }}
-        />
-      )}
-
-      {lastCompleted && lastService?.slug && !activeJob && (
-        <div className="card rise" style={{ marginTop: 18 }}>
-          <p className="tile-label">Book again in one tap</p>
-          <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{lastService.name}</h2>
-          <p className="muted" style={{ margin: '0 0 12px' }}>
-            Same length as last time ({formatMinutes(lastCompleted.duration_minutes)}). Address
-            pre-fills from your profile.
-          </p>
-          <Link
-            href={`/dashboard/book?service=${encodeURIComponent(lastService.slug)}&duration=${lastCompleted.duration_minutes}`}
-            className="btn btn-primary"
-          >
-            Book {lastService.name} again
-          </Link>
-        </div>
-      )}
-
-      <div className="card dash-hero rise" style={{ marginTop: 18 }}>
-        <div className="ring">
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <defs>
-              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#1c2b3a" />
-                <stop offset="100%" stopColor="#c1440e" />
-              </linearGradient>
-            </defs>
-            <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(28,43,58,0.1)" strokeWidth="12" />
-            <circle
-              cx="60"
-              cy="60"
-              r={R}
-              fill="none"
-              stroke="url(#ringGrad)"
-              strokeWidth="12"
-              strokeLinecap="round"
-              strokeDasharray={C}
-              strokeDashoffset={dashoffset}
-            />
-          </svg>
-          <div className="ring-center">
-            <span className="ring-big">{compact(available)}</span>
-            <span className="ring-label">available</span>
+      <div className="dashboard-overview">
+        <article className="card balance-card rise" style={balanceStyle} aria-labelledby="plan-balance-heading">
+          <div>
+            <p className="tile-label">Available to book</p>
+            <h2 id="plan-balance-heading" className="balance-value">
+              {awaitingMinutes ? 'Activating' : formatMinutes(available)}
+            </h2>
+            <p className="balance-caption">
+              {awaitingMinutes
+                ? 'Your membership is active. Service time will appear here as soon as the payment update finishes.'
+                : 'This is the exact service time you can use for a new booking right now.'}
+            </p>
           </div>
-        </div>
+          <div>
+            <div className="balance-progress" aria-hidden="true">
+              <span />
+            </div>
+            <div className="balance-meta">
+              <span>{formatMinutes(held)} reserved for upcoming bookings</span>
+              <span>
+                {plan?.name ?? 'Membership'}
+                {sub?.current_period_end ? ` · renews ${formatDateTime(sub.current_period_end)}` : ''}
+              </span>
+            </div>
+          </div>
+        </article>
 
-        <div className="dash-hero-body">
-          <h1>
-            {awaitingMinutes
-              ? 'Setting up your service time'
-              : `${formatMinutes(available)} of service time left`}
-          </h1>
-          <p>
-            {held > 0 ? `${formatMinutes(held)} held for upcoming bookings. ` : ''}
-            {plan ? `Your ${plan.name} plan` : 'Your plan'}
-            {sub?.current_period_end
-              ? ` refreshes ${formatDateTime(sub.current_period_end)}.`
-              : ' refreshes each month.'}
-          </p>
-          {!awaitingMinutes && (
-            <Link href="/dashboard/book" className="btn btn-primary">
-              Book a service
-            </Link>
-          )}
-        </div>
+        {nextBooking ? (
+          <ActiveJobCard booking={nextBooking} />
+        ) : (
+          <article className="card next-service-card rise">
+            <div>
+              <div className="next-service-head">
+                <div>
+                  <p className="tile-label">Next service</p>
+                  <span className="tag">Nothing scheduled</span>
+                </div>
+                <House size={24} aria-hidden="true" />
+              </div>
+              <h2>Your schedule is clear</h2>
+              <p className="muted">
+                Choose a service, arrival window, and visit length. Wurx shows the exact plan time before you confirm.
+              </p>
+              {lastCompleted?.services?.slug && (
+                <p className="muted">
+                  Your last service was {lastCompleted.services.name}. You can book the same service and visit length again.
+                </p>
+              )}
+            </div>
+            <div className="booking-row-actions">
+              <Link href="/dashboard/book" className="btn btn-primary">
+                Browse services
+              </Link>
+              {lastCompleted?.services?.slug && (
+                <Link
+                  href={`/dashboard/book?service=${encodeURIComponent(lastCompleted.services.slug)}&duration=${lastCompleted.duration_minutes}`}
+                  className="btn"
+                >
+                  Book {lastCompleted.services.name} again
+                </Link>
+              )}
+            </div>
+          </article>
+        )}
       </div>
 
-      {!awaitingMinutes && (
-        <LowBalanceNudge availableMinutes={available} monthlyMinutes={monthly} />
-      )}
+      {!awaitingMinutes && <LowBalanceNudge availableMinutes={available} monthlyMinutes={plan?.monthly_minutes ?? 0} />}
 
       {showFirstJobGuide && (
-        <div className="card rise" style={{ marginTop: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Sparkles size={18} aria-hidden />
-            <h2 style={{ margin: 0, fontSize: 18 }}>Book your first job in 2 minutes</h2>
+        <div className="card rise">
+          <div className="card-heading" style={{ marginBottom: 8 }}>
+            <Sparkles size={19} aria-hidden="true" />
+            <h2 style={{ margin: 0, fontSize: 22 }}>Book your first service</h2>
           </div>
           <p className="muted" style={{ margin: '0 0 14px' }}>
-            Pick something common — we’ll use your saved address when you have one.
+            Start with a common household task. Your saved address and plan balance will be carried into the booking.
           </p>
           <div className="grid grid-3" style={{ gap: 12 }}>
             {(firstJobHints.length > 0
               ? firstJobHints
-              : [{ slug: '', label: 'Browse services', blurb: 'See everything we do' }]
-            ).map((h) => (
+              : [{ slug: '', label: 'Browse services', blurb: 'See every available service' }]
+            ).map((hint) => (
               <Link
-                key={h.slug || 'browse'}
-                href={
-                  h.slug
-                    ? `/dashboard/book?service=${encodeURIComponent(h.slug)}`
-                    : '/dashboard/book'
-                }
+                key={hint.slug || 'browse'}
+                href={hint.slug ? `/dashboard/book?service=${encodeURIComponent(hint.slug)}` : '/dashboard/book'}
                 className="card card-hover"
-                style={{ textDecoration: 'none', color: 'inherit', margin: 0 }}
               >
-                <strong style={{ display: 'block', marginBottom: 4 }}>{h.label}</strong>
+                <strong style={{ display: 'block', marginBottom: 4 }}>{hint.label}</strong>
                 <span className="muted" style={{ fontSize: 14 }}>
-                  {h.blurb}
+                  {hint.blurb}
                 </span>
               </Link>
             ))}
@@ -371,120 +340,127 @@ export default async function Dashboard({
         </div>
       )}
 
-      <div className="grid grid-2" style={{ marginTop: 18 }}>
-        <div className="card">
-          <p className="tile-label">Plan</p>
-          <p style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 600 }}>
-            {plan?.name ?? (awaitingMinutes ? 'Activating…' : 'Plan')}{' '}
+      <div className="dashboard-secondary-grid">
+        <article className="card compact-plan-card">
+          <p className="tile-label">Membership</p>
+          <h2 style={{ margin: '0 0 5px', fontSize: 23 }}>
+            {plan?.name ?? (awaitingMinutes ? 'Activating' : 'Your plan')}{' '}
             {sub?.status && <span className="tag good">{sub.status}</span>}
-          </p>
+          </h2>
           {plan && (
-            <p className="muted" style={{ margin: '2px 0' }}>
-              {formatMinutes(plan.monthly_minutes)} refreshed every month
+            <p className="muted" style={{ margin: '0 0 14px' }}>
+              {formatMinutes(plan.monthly_minutes)} added each billing period
             </p>
           )}
-          <div style={{ marginTop: 12 }}>
-            <ManageSubscriptionButton />
-          </div>
-        </div>
+          <ManageSubscriptionButton />
+        </article>
 
-        <div className="card">
-          <p className="tile-label">Account</p>
-          <p style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 600 }}>
-            {firstName ?? 'You'}
-          </p>
-          <p className="muted" style={{ margin: '2px 0' }}>
+        <article className="card compact-account-card">
+          <div className="card-heading">
+            <UserRound size={19} aria-hidden="true" />
+            <p className="tile-label" style={{ margin: 0 }}>Account</p>
+          </div>
+          <h2 style={{ margin: '10px 0 4px', fontSize: 23 }}>{firstName ?? 'Your account'}</h2>
+          <p className="muted" style={{ margin: 0, overflowWrap: 'anywhere' }}>
             {profile?.email ?? user.email}
           </p>
           {!profile?.phone && (
-            <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
-              Add a phone for “pro en route” texts.
+            <p className="muted" style={{ margin: '8px 0 0', fontSize: 14 }}>
+              Add a phone number to receive “professional on the way” texts.
             </p>
           )}
-          <Link href="/dashboard/profile" style={{ color: 'var(--brand)', fontSize: 14 }}>
-            Edit profile
+          <Link href="/dashboard/profile" className="btn" style={{ marginTop: 14 }}>
+            Manage account
           </Link>
-        </div>
+        </article>
       </div>
 
       <NotificationsPanel initial={notifications} />
 
-      <div className="section">
-        <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
-          <h2 style={{ margin: 0 }}>Your bookings</h2>
+      <section id="bookings" className="dashboard-bookings" aria-labelledby="bookings-heading">
+        <div className="dashboard-section-head">
+          <div>
+            <p className="dashboard-kicker">Schedule and history</p>
+            <h2 id="bookings-heading">Your bookings</h2>
+          </div>
+          <Link href="/dashboard/book" className="btn">
+            New booking
+          </Link>
         </div>
-        <div className="card" style={{ marginTop: 6 }}>
+
+        <div className="card booking-list-card">
           {bookings.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              No bookings yet.{' '}
-              <Link href="/dashboard/book" style={{ color: 'var(--brand)' }}>
-                Book a service
+            <div className="empty-state" style={{ paddingBlock: 24 }}>
+              <strong>No bookings yet</strong>
+              <p className="muted">Choose a service to create your first request.</p>
+              <Link href="/dashboard/book" className="btn btn-primary">
+                Browse services
               </Link>
-            </p>
+            </div>
           )}
-          {bookings.map((b) => {
-            const service = (b.services ?? null) as {
-              name: string
-              icon: string | null
-              slug: string
-            } | null
-            const provider = (b.providers ?? null) as
-              | { id: string; business_name: string; rating: number | null }
-              | null
-            const cancellable = b.status === 'requested' || b.status === 'confirmed'
-            const needsReview =
-              b.status === 'completed' && !reviewedBookingIds.has(b.id) && provider
+
+          {bookings.map((booking) => {
+            const service = booking.services
+            const provider = booking.providers
+            const cancellable = booking.status === 'requested' || booking.status === 'confirmed'
+            const needsReview = booking.status === 'completed' && !reviewedBookingIds.has(booking.id) && provider
             const bookAgainHref = service?.slug
-              ? `/dashboard/book?service=${encodeURIComponent(service.slug)}&duration=${b.duration_minutes}`
+              ? `/dashboard/book?service=${encodeURIComponent(service.slug)}&duration=${booking.duration_minutes}`
               : '/dashboard/book'
-            const windowEnd = (b as { window_end?: string | null }).window_end
+            const when = booking.window_end
+              ? formatWindow(booking.scheduled_start, booking.window_end)
+              : formatDateTime(booking.scheduled_start)
+            const photos = photosByBooking.get(booking.id) ?? []
+
             return (
-              <div key={b.id} className="list-row" style={{ flexWrap: 'wrap' }}>
-                <div>
-                  <strong className="card-heading">
-                    <ServiceIcon name={service?.icon} size={16} />
-                    {service?.name ?? 'Service'}
+              <article key={booking.id} className="booking-row">
+                <div className="booking-row-main">
+                  <strong className="booking-row-title">
+                    <ServiceIcon name={service?.icon} size={18} />
+                    {service?.name ?? 'Home service'}
                   </strong>
-                  <div className="muted" style={{ fontSize: 14 }}>
-                    {windowEnd
-                      ? formatWindow(b.scheduled_start, windowEnd)
-                      : formatDateTime(b.scheduled_start)}{' '}
-                    · {formatMinutes(b.duration_minutes)}
+                  <div className="booking-row-meta">
+                    {when} · {formatMinutes(booking.duration_minutes)}
                   </div>
                   {provider && (
-                    <div className="muted" style={{ fontSize: 14 }}>
+                    <div className="booking-row-meta">
                       {provider.business_name}
-                      {provider.rating != null && ` · ★ ${provider.rating.toFixed(1)}`}
+                      {provider.rating != null && ` · ${provider.rating.toFixed(1)} rating`}
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>
-                    {STATUS_LABEL[b.status] ?? b.status}
+
+                <div className="booking-row-actions">
+                  <span className={STATUS_TAG[booking.status] ?? 'tag'}>
+                    {STATUS_LABEL[booking.status] ?? booking.status}
                   </span>
-                  {cancellable && <CancelBookingButton bookingId={b.id} />}
-                  {b.status === 'completed' && (
+                  {cancellable && <CancelBookingButton bookingId={booking.id} />}
+                  {booking.status === 'completed' && (
                     <Link href={bookAgainHref} className="btn btn-ghost">
                       Book again
                     </Link>
                   )}
                 </div>
+
                 {needsReview && provider && (
-                  <ReviewForm bookingId={b.id} providerId={provider.id} />
+                  <div className="booking-row-extra">
+                    <ReviewForm bookingId={booking.id} providerId={provider.id} />
+                  </div>
                 )}
-                {(photosByBooking.get(b.id) ?? []).length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', width: '100%' }}>
-                    {(photosByBooking.get(b.id) ?? []).map((photo, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <a key={i} href={photo.url} target="_blank" rel="noreferrer">
+
+                {photos.length > 0 && (
+                  <div className="booking-row-extra" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {photos.map((photo, index) => (
+                      <a key={`${booking.id}-${index}`} href={photo.url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={photo.url}
-                          alt={photo.caption ?? 'Completed job photo'}
-                          width={84}
-                          height={84}
+                          alt={photo.caption ?? `Completed ${service?.name ?? 'service'} photo ${index + 1}`}
+                          width={88}
+                          height={88}
                           style={{
                             objectFit: 'cover',
-                            borderRadius: 4,
+                            borderRadius: 12,
                             border: '1px solid var(--border)',
                           }}
                         />
@@ -492,11 +468,11 @@ export default async function Dashboard({
                     ))}
                   </div>
                 )}
-              </div>
+              </article>
             )
           })}
         </div>
-      </div>
+      </section>
     </section>
   )
 }
