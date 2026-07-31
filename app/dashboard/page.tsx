@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { CalendarDays, Check, CheckCircle2, House, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
+import { Check, CheckCircle2, House, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes, formatWindow } from '@/lib/format'
 import { CancelBookingButton } from '@/components/CancelBookingButton'

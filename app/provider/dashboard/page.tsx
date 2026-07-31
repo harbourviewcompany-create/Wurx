@@ -115,14 +115,13 @@ export default async function ProviderDashboard() {
     services: { name: string; icon: string | null } | null
   }
 
-  const offers = (offersRes.data ?? [])
-    .map((offer) => {
-      const booking = (offer.bookings ?? null) as BookingSnippet | null
-      return { id: offer.id, expires_at: offer.expires_at, booking }
-    })
-    .filter((offer) => offer.booking && offer.booking.status === 'requested' && !offer.booking.provider_id)
+  const offers = (offersRes.data ?? []).flatMap((offer) => {
+    const booking = (offer.bookings ?? null) as BookingSnippet | null
+    if (!booking || booking.status !== 'requested' || booking.provider_id) return []
+    return [{ id: offer.id, expires_at: offer.expires_at, booking }]
+  })
 
-  const offeredBookingIds = new Set(offers.map((offer) => offer.booking!.id))
+  const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))
   const openJobs = (openRes.data ?? []).filter((booking) => !offeredBookingIds.has(booking.id))
   const myBookings = myBookingsRes.data ?? []
   const reviews = reviewsRes.data ?? []
@@ -196,7 +195,7 @@ export default async function ProviderDashboard() {
             </div>
           )}
           {offers.map((offer) => {
-            const booking = offer.booking!
+            const booking = offer.booking
             const service = booking.services
             const left = minutesLeft(offer.expires_at)
             const maps = mapsSearchUrl({
