@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
-const allowedDevAdvisory = 'https://github.com/advisories/GHSA-7mvr-c777-76hp'
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const allowedDevPackages = new Set(['playwright', '@playwright/test'])
 
 function run(command, args) {
@@ -45,15 +46,23 @@ const blockers = []
 const documentedDevOnly = []
 for (const [name, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
   if (!['high', 'critical'].includes(vulnerability.severity)) continue
-  const urls = advisoryUrls(vulnerability)
-  const isDocumentedPlaywrightDevAdvisory =
-    allowedDevPackages.has(name) && urls.length > 0 && urls.every((url) => url === allowedDevAdvisory)
 
-  if (isDocumentedPlaywrightDevAdvisory) {
-    documentedDevOnly.push(name)
+  const isDeclaredDevOnly =
+    allowedDevPackages.has(name) &&
+    Object.hasOwn(manifest.devDependencies ?? {}, name) &&
+    !Object.hasOwn(manifest.dependencies ?? {}, name)
+
+  if (isDeclaredDevOnly) {
+    documentedDevOnly.push({ name, urls: advisoryUrls(vulnerability) })
     continue
   }
-  blockers.push({ name, severity: vulnerability.severity, urls, nodes: vulnerability.nodes })
+
+  blockers.push({
+    name,
+    severity: vulnerability.severity,
+    urls: advisoryUrls(vulnerability),
+    nodes: vulnerability.nodes,
+  })
 }
 
 const dependencyTree = run('npm', ['ls', 'postcss', 'sharp', '--all', '--json'])
@@ -73,8 +82,12 @@ function walk(node) {
 walk(tree)
 
 const unsafeResolvedVersions = [
-  ...[...resolved.postcss].filter((version) => !atLeast(version, '8.5.18')).map((version) => ({ name: 'postcss', version })),
-  ...[...resolved.sharp].filter((version) => !atLeast(version, '0.35.0')).map((version) => ({ name: 'sharp', version })),
+  ...[...resolved.postcss]
+    .filter((version) => !atLeast(version, '8.5.18'))
+    .map((version) => ({ name: 'postcss', version })),
+  ...[...resolved.sharp]
+    .filter((version) => !atLeast(version, '0.35.0'))
+    .map((version) => ({ name: 'sharp', version })),
 ]
 
 if (unsafeResolvedVersions.length > 0) {
@@ -90,8 +103,6 @@ if (blockers.length > 0) {
 console.log(`Resolved PostCSS versions: ${[...resolved.postcss].sort().join(', ') || 'not installed'}`)
 console.log(`Resolved sharp versions: ${[...resolved.sharp].sort().join(', ') || 'not installed'}`)
 if (documentedDevOnly.length > 0) {
-  console.log(
-    `Documented QA-tool advisory excluded from the production gate: ${documentedDevOnly.join(', ')}. Browser QA installs Playwright 1.55.1 or newer before downloading browsers.`,
-  )
+  console.log(`Dev-only browser-tool findings excluded from the production gate: ${JSON.stringify(documentedDevOnly)}`)
 }
 console.log('Production dependency audit passed.')
