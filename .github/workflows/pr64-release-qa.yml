@@ -9,6 +9,7 @@ on:
       - 'components/**'
       - 'tests/e2e/**'
       - 'playwright.config.mjs'
+      - 'scripts/audit-release.mjs'
 
 permissions:
   contents: write
@@ -44,6 +45,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           dashboard = Path('app/dashboard/page.tsx')
           text = dashboard.read_text()
@@ -55,36 +57,26 @@ jobs:
 
           provider = Path('app/provider/dashboard/page.tsx')
           text = provider.read_text()
-          old = """  const offers = (offersRes.data ?? [])
-            .map((offer) => {
-              const booking = (offer.bookings ?? null) as BookingSnippet | null
-              return { id: offer.id, expires_at: offer.expires_at, booking }
-            })
-            .filter((offer) => offer.booking && offer.booking.status === 'requested' && !offer.booking.provider_id)
-
-          const offeredBookingIds = new Set(offers.map((offer) => offer.booking!.id))
-          """
-          new = """  const offers = (offersRes.data ?? []).flatMap((offer) => {
-            const booking = (offer.bookings ?? null) as BookingSnippet | null
-            if (!booking || booking.status !== 'requested' || booking.provider_id) return []
-            return [{ id: offer.id, expires_at: offer.expires_at, booking }]
-          })
-
-          const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))
-          """
-          if old in text:
-              text = text.replace(old, new, 1)
-          else:
-              compact_old = """  const offers = (offersRes.data ?? [])
-            .map((offer) => {
-              const booking = (offer.bookings ?? null) as BookingSnippet | null
-              return { id: offer.id, expires_at: offer.expires_at, booking }
-            })
-            .filter((offer) => offer.booking && offer.booking.status === 'requested' && !offer.booking.provider_id)
-
-          const offeredBookingIds = new Set(offers.map((offer) => offer.booking!.id))
-          """
-              text = text.replace(compact_old, new, 1)
+          pattern = re.compile(
+              r"  const offers = \(offersRes\.data \?\? \[\]\)\n"
+              r"    \.map\(\(offer\) => \{\n"
+              r"      const booking = \(offer\.bookings \?\? null\) as BookingSnippet \| null\n"
+              r"      return \{ id: offer\.id, expires_at: offer\.expires_at, booking \}\n"
+              r"    \}\)\n"
+              r"    \.filter\(\(offer\) => offer\.booking && offer\.booking\.status === 'requested' && !offer\.booking\.provider_id\)\n\n"
+              r"  const offeredBookingIds = new Set\(offers\.map\(\(offer\) => offer\.booking!\.id\)\)\n"
+          )
+          replacement = (
+              "  const offers = (offersRes.data ?? []).flatMap((offer) => {\n"
+              "    const booking = (offer.bookings ?? null) as BookingSnippet | null\n"
+              "    if (!booking || booking.status !== 'requested' || booking.provider_id) return []\n"
+              "    return [{ id: offer.id, expires_at: offer.expires_at, booking }]\n"
+              "  })\n\n"
+              "  const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))\n"
+          )
+          text, count = pattern.subn(replacement, text, count=1)
+          if count == 0 and 'const offers = (offersRes.data ?? []).flatMap' not in text:
+              raise SystemExit('Provider offer normalization block was not found')
           text = text.replace("            const booking = offer.booking!\n", "            const booking = offer.booking\n", 1)
           provider.write_text(text)
           PY
@@ -128,37 +120,15 @@ jobs:
             artifacts/playwright-results
           retention-days: 21
 
-      - name: Commit verified source and remove temporary harnesses
+      - name: Commit verified application source
         if: always()
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          workflow = Path('.github/workflows/ui-qa.yml')
-          if workflow.exists():
-              text = workflow.read_text()
-              replacements = {
-                  'WURX_E2E_HOMEOWNER_EMAIL': '$' + '{{ secrets.WURX_E2E_HOMEOWNER_EMAIL }}',
-                  'WURX_E2E_HOMEOWNER_PASSWORD': '$' + '{{ secrets.WURX_E2E_HOMEOWNER_PASSWORD }}',
-                  'WURX_E2E_PROFESSIONAL_EMAIL': '$' + '{{ secrets.WURX_E2E_PROFESSIONAL_EMAIL }}',
-                  'WURX_E2E_PROFESSIONAL_PASSWORD': '$' + '{{ secrets.WURX_E2E_PROFESSIONAL_PASSWORD }}',
-              }
-              for key, value in replacements.items():
-                  text = re.sub(rf'^(\s*{key}:).+$', rf'\1 {value}', text, flags=re.MULTILINE)
-              workflow.write_text(text)
-          PY
-          rm -f \
-            .github/workflows/pr64-release-qa.yml \
-            .github/workflows/pr64-lock-refresh.yml \
-            .github/workflows/pr64-code-cleanup.yml \
-            .github/workflows/pr64-finalize-source.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add app/dashboard/page.tsx app/provider/dashboard/page.tsx package-lock.json
           if git diff --cached --quiet; then
-            echo 'No source cleanup changes to commit.'
+            echo 'No application source changes to commit.'
           else
-            git commit -m 'fix(qa): finalize lint cleanup and remove temporary harnesses'
+            git commit -m 'fix(qa): finalize lint cleanup and supported dependency lock'
             git push origin HEAD:${{ github.event.pull_request.head.ref }}
           fi
