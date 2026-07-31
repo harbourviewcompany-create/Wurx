@@ -56,21 +56,45 @@ async function ensureConnectedAccount(
     metadata: { wurx_provider_id: provider.id, supabase_user_id: userId },
   })
 
-  const { error: persistErr } = await supabase
+  // Claim the row only while it is still empty. The `.is(null)` predicate makes
+  // this atomic: a concurrent invocation that already stored an account leaves
+  // this update matching zero rows, so we defer to theirs instead of
+  // overwriting it. Returning an unpersisted id would be worse than failing —
+  // the next call would see a null column and mint a *second* Stripe account.
+  const { data: claimed, error: persistErr } = await supabase
     .from('providers')
     .update({ stripe_account_id: account.id })
     .eq('id', provider.id)
+    .is('stripe_account_id', null)
+    .select('stripe_account_id')
+    .maybeSingle()
 
   if (persistErr) {
-    // Account already exists on Stripe — return it so the pro can continue,
-    // but log loudly so a human can reconcile if the row stays null.
     console.error(
       `Created Stripe account ${account.id} for provider ${provider.id} but failed to persist stripe_account_id:`,
       persistErr.message,
     )
+    throw new Error('Could not save your payout account. Please try again.')
   }
 
-  return account.id
+  if (claimed?.stripe_account_id) return claimed.stripe_account_id
+
+  // Lost the race. Use whichever account won so the pro continues in one place,
+  // and log ours loudly — it is an orphan on Stripe holding no KYC yet.
+  const { data: existing } = await supabase
+    .from('providers')
+    .select('stripe_account_id')
+    .eq('id', provider.id)
+    .maybeSingle()
+
+  if (existing?.stripe_account_id) {
+    console.error(
+      `Orphaned Stripe account ${account.id} for provider ${provider.id}: a concurrent request stored ${existing.stripe_account_id} first`,
+    )
+    return existing.stripe_account_id
+  }
+
+  throw new Error('Could not save your payout account. Please try again.')
 }
 
 Deno.serve(async (req: Request) => {
@@ -186,10 +210,21 @@ Deno.serve(async (req: Request) => {
       const enabled = !!account.payouts_enabled
 
       if (enabled !== provider.payouts_enabled) {
-        await supabase
+        const { error: syncErr } = await supabase
           .from('providers')
           .update({ payouts_enabled: enabled })
           .eq('id', provider.id)
+
+        // Don't report a state we failed to store — the dashboard reads the
+        // column, so silently returning `enabled` here would show a pro as
+        // paid-out-ready while the row still says otherwise.
+        if (syncErr) {
+          console.error(
+            `Failed to sync payouts_enabled=${enabled} for provider ${provider.id}:`,
+            syncErr.message,
+          )
+          return json({ error: 'Could not refresh your payout status. Please try again.' }, 500)
+        }
       }
 
       return json({

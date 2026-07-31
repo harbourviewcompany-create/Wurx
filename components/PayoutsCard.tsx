@@ -63,6 +63,7 @@ export function PayoutsCard({
               : 'Set up payouts to receive money for the jobs you complete. Takes about two minutes, right here on Wurx.'}
           </p>
           <button
+            type="button"
             className="btn btn-primary"
             onClick={() => setShowOnboarding(true)}
             style={{ marginTop: 10 }}
