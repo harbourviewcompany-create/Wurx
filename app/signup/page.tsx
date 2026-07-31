@@ -66,17 +66,15 @@ function SignupForm() {
       return
     }
 
-    // If email confirmation is enabled, there is no active session yet.
     if (!data.session) {
       setNeedsConfirm(true)
       setLoading(false)
       return
     }
 
-    // Plan already chosen — go straight to Stripe Checkout.
     if (priceId && data.user) {
       try {
-        const url = await startCheckoutSession(supabase, data.user.id, priceId)
+        const url = await startCheckoutSession(supabase, priceId)
         window.location.href = url
         return
       } catch (checkoutErr) {
