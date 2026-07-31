@@ -19,7 +19,10 @@ const dmSans = DM_Sans({
   display: 'swap',
 })
 
+const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://wurx.vercel.app'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(publicSiteUrl),
   title: 'Wurx — Subscription home services',
   description:
     'A monthly subscription for home services in Ottawa. Book cleaning, snow removal, lawn care, handyman help and more with the time in your plan.',
