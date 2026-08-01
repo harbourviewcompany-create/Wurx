@@ -14,3 +14,7 @@ verify_jwt = false
 # is restricted to authenticated Wurx admins inside the function.
 [functions.stripe-replay]
 verify_jwt = true
+
+# Provider onboarding, status, and admin payouts require an authenticated caller.
+[functions.provider-payouts]
+verify_jwt = true
