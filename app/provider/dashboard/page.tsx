@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { MapPin } from 'lucide-react'
+import { BriefcaseBusiness, ClipboardCheck, MapPin, ShieldCheck, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime, formatMinutes, mapsSearchUrl } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
@@ -14,8 +14,16 @@ import { NotificationsPanel } from '@/components/NotificationsPanel'
 
 export const dynamic = 'force-dynamic'
 
+const STATUS_LABEL: Record<string, string> = {
+  requested: 'Open',
+  confirmed: 'Confirmed',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+}
+
 const STATUS_TAG: Record<string, string> = {
-  requested: 'tag',
+  requested: 'tag warn',
   confirmed: 'tag good',
   in_progress: 'tag good',
   completed: 'tag good',
@@ -28,7 +36,6 @@ function minutesLeft(expiresAt: string): number {
 
 export default async function ProviderDashboard() {
   const supabase = await createClient()
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -72,10 +79,7 @@ export default async function ProviderDashboard() {
       .eq('provider_id', provider.id)
       .order('scheduled_start', { ascending: false })
       .limit(20),
-    supabase
-      .from('provider_earnings')
-      .select('net_cents, paid_out_at')
-      .eq('provider_id', provider.id),
+    supabase.from('provider_earnings').select('net_cents, paid_out_at').eq('provider_id', provider.id),
     supabase
       .from('notifications')
       .select('id, kind, title, body, read_at, created_at')
@@ -92,11 +96,11 @@ export default async function ProviderDashboard() {
 
   const earnings = earningsRes.data ?? []
   const pendingCents = earnings
-    .filter((e) => !e.paid_out_at)
-    .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
+    .filter((earning) => !earning.paid_out_at)
+    .reduce((sum, earning) => sum + (earning.net_cents ?? 0), 0)
   const paidCents = earnings
-    .filter((e) => e.paid_out_at)
-    .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
+    .filter((earning) => earning.paid_out_at)
+    .reduce((sum, earning) => sum + (earning.net_cents ?? 0), 0)
 
   type BookingSnippet = {
     id: string
@@ -111,259 +115,274 @@ export default async function ProviderDashboard() {
     services: { name: string; icon: string | null } | null
   }
 
-  const offers = (offersRes.data ?? [])
-    .map((o) => {
-      const booking = (o.bookings ?? null) as BookingSnippet | null
-      return {
-        id: o.id,
-        expires_at: o.expires_at,
-        booking,
-      }
-    })
-    .filter((o) => o.booking && o.booking.status === 'requested' && !o.booking.provider_id)
+  const offers = (offersRes.data ?? []).flatMap((offer) => {
+    const booking = (offer.bookings ?? null) as BookingSnippet | null
+    if (!booking || booking.status !== 'requested' || booking.provider_id) return []
+    return [{ id: offer.id, expires_at: offer.expires_at, booking }]
+  })
 
-  const offeredBookingIds = new Set(offers.map((o) => o.booking!.id))
-  const openJobs = (openRes.data ?? []).filter((b) => !offeredBookingIds.has(b.id))
+  const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))
+  const openJobs = (openRes.data ?? []).filter((booking) => !offeredBookingIds.has(booking.id))
   const myBookings = myBookingsRes.data ?? []
   const reviews = reviewsRes.data ?? []
+  const verificationReady = provider.verification === 'verified' && provider.is_active
 
   return (
-    <section className="container section">
-      <div className="list-row" style={{ paddingTop: 0 }}>
-        <h1 style={{ margin: 0 }}>{provider.business_name}</h1>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span className={provider.verification === 'verified' ? 'tag good' : 'tag warn'}>
-            {provider.verification === 'verified' ? 'Verified' : 'Verification pending'}
-          </span>
-          {provider.rating != null && <span className="tag">★ {provider.rating.toFixed(1)}</span>}
-          <Link href="/provider/profile" className="btn btn-ghost">
-            Edit profile
-          </Link>
+    <section className="container section provider-shell">
+      <header className="provider-header rise">
+        <div>
+          <p className="dashboard-kicker">Professional workspace</p>
+          <h1>{provider.business_name}</h1>
+          <div className="provider-status-row">
+            <span className={provider.verification === 'verified' ? 'tag good' : 'tag warn'}>
+              <ShieldCheck size={14} aria-hidden="true" />
+              {provider.verification === 'verified' ? 'Identity verified' : 'Application under review'}
+            </span>
+            {provider.rating != null && (
+              <span className="tag">
+                <Star size={14} aria-hidden="true" /> {provider.rating.toFixed(1)} rating
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-      {provider.verification !== 'verified' ? (
-        <p className="form-note" style={{ marginTop: 4 }}>
-          We're reviewing your application. Job offers will appear here
-          once you're verified.
-        </p>
-      ) : (
-        !provider.is_active && (
-          <p className="form-note" style={{ marginTop: 4 }}>
-            Your profile is inactive, so it won't appear for new jobs.
-            Contact support if this is unexpected.
+        <Link href="/provider/profile" className="btn">
+          Edit professional profile
+        </Link>
+      </header>
+
+      {!verificationReady && (
+        <section className="card provider-setup-card" aria-labelledby="provider-setup-heading">
+          <div className="card-heading">
+            <ClipboardCheck size={22} aria-hidden="true" />
+            <h2 id="provider-setup-heading" style={{ margin: 0, fontSize: 24 }}>
+              {provider.verification === 'verified' ? 'Profile temporarily inactive' : 'Application review in progress'}
+            </h2>
+          </div>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            {provider.verification === 'verified'
+              ? 'New offers are paused for this profile. Review your professional profile or contact support if this was unexpected.'
+              : 'Wurx is reviewing your professional application. Job offers will appear here automatically after verification is complete.'}
           </p>
-        )
+        </section>
       )}
 
-      <div style={{ marginTop: 18 }}>
-        <PayoutsCard
-          payoutsEnabled={!!provider.payouts_enabled}
-          hasAccount={!!provider.stripe_account_id}
-          pendingCents={pendingCents}
-          paidCents={paidCents}
-        />
-      </div>
+      <PayoutsCard
+        payoutsEnabled={!!provider.payouts_enabled}
+        hasAccount={!!provider.stripe_account_id}
+        pendingCents={pendingCents}
+        paidCents={paidCents}
+      />
 
       <NotificationsPanel initial={notifRes.data ?? []} />
 
-      <div className="section">
-        <h2>Offers for you</h2>
-        <p className="muted" style={{ marginTop: -8 }}>
-          Matched to your services, area, and availability. Accept before the
-          timer runs out — first accept wins.
+      <section id="offers" className="provider-section" aria-labelledby="offers-heading">
+        <div className="dashboard-section-head">
+          <div>
+            <p className="dashboard-kicker">Matched opportunities</p>
+            <h2 id="offers-heading">Offers for you</h2>
+          </div>
+          {offers.length > 0 && <span className="tag good">{offers.length} available</span>}
+        </div>
+        <p className="muted provider-section-copy">
+          These requests match your services, area, and availability. Review the details before accepting.
         </p>
-        <div className="card">
+        <div className="card provider-list-card">
           {offers.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              No open offers right now. New bookings that match you will show
-              up here automatically.
-            </p>
+            <div className="empty-state">
+              <BriefcaseBusiness size={26} aria-hidden="true" />
+              <h3>No open offers right now</h3>
+              <p className="muted">New matching requests will appear here automatically.</p>
+            </div>
           )}
-          {offers.map((o) => {
-            const b = o.booking!
-            const service = b.services
-            const left = minutesLeft(o.expires_at)
+          {offers.map((offer) => {
+            const booking = offer.booking
+            const service = booking.services
+            const left = minutesLeft(offer.expires_at)
             const maps = mapsSearchUrl({
-              address_line1: b.address_line1,
-              city: b.city,
-              postal_code: b.postal_code,
+              address_line1: booking.address_line1,
+              city: booking.city,
+              postal_code: booking.postal_code,
             })
-            const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
+            const where = [booking.address_line1, booking.city, booking.postal_code].filter(Boolean).join(', ')
+
             return (
-              <div key={o.id} className="offer-card">
+              <article key={offer.id} className="offer-card">
                 <div className="offer-card-main">
                   <strong className="card-heading">
-                    <ServiceIcon name={service?.icon} size={16} />
-                    {service?.name ?? 'Service'}
+                    <ServiceIcon name={service?.icon} size={18} />
+                    {service?.name ?? 'Home service'}
                   </strong>
-                  <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)} on site
+                  <div className="booking-row-meta">
+                    {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)} on site
                   </div>
                   {where && (
-                    <div className="muted" style={{ fontSize: 14, marginTop: 6 }}>
-                      <MapPin size={14} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-                      {where}
+                    <div className="booking-row-meta">
+                      <MapPin size={15} aria-hidden="true" /> {where}
                       {maps && (
                         <>
                           {' · '}
-                          <a
-                            href={maps}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--brand)', fontWeight: 600 }}
-                          >
+                          <a href={maps} target="_blank" rel="noopener noreferrer" className="provider-link">
                             Open map
                           </a>
                         </>
                       )}
                     </div>
                   )}
-                  {b.notes?.trim() && (
-                    <p style={{ margin: '8px 0 0', fontSize: 14 }}>
-                      <span className="muted">Notes: </span>
-                      {b.notes.trim()}
+                  {booking.notes?.trim() && (
+                    <p style={{ margin: '9px 0 0', fontSize: 14 }}>
+                      <span className="muted">Customer notes: </span>
+                      {booking.notes.trim()}
                     </p>
                   )}
-                  <div className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 10 }}>
-                    {left <= 0 ? 'Expiring…' : `${left} min left to accept`}
-                  </div>
+                  <span className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 11 }}>
+                    {left <= 0 ? 'Offer expiring' : `${left} minutes to respond`}
+                  </span>
                 </div>
-                <OfferRespondButtons offerId={o.id} fullWidth />
-              </div>
+                <OfferRespondButtons offerId={offer.id} fullWidth />
+              </article>
             )
           })}
         </div>
-      </div>
+      </section>
 
       {openJobs.length > 0 && (
-        <div className="section">
-          <h2>Open jobs near you</h2>
-          <p className="muted" style={{ marginTop: -8 }}>
-            Jobs you can still claim without a formal offer. First to claim gets
-            it.
-          </p>
-          <div className="card">
-            {openJobs.map((b) => {
-              const service = (b.services ?? null) as { name: string; icon: string | null } | null
+        <section className="provider-section" aria-labelledby="nearby-heading">
+          <div className="dashboard-section-head">
+            <div>
+              <p className="dashboard-kicker">Additional work</p>
+              <h2 id="nearby-heading">Open jobs near you</h2>
+            </div>
+          </div>
+          <p className="muted provider-section-copy">Available requests you can claim without a direct offer.</p>
+          <div className="card provider-list-card">
+            {openJobs.map((booking) => {
+              const service = (booking.services ?? null) as { name: string; icon: string | null } | null
               const maps = mapsSearchUrl({
-                address_line1: b.address_line1,
-                city: b.city,
-                postal_code: b.postal_code,
+                address_line1: booking.address_line1,
+                city: booking.city,
+                postal_code: booking.postal_code,
               })
-              const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
+              const where = [booking.address_line1, booking.city, booking.postal_code].filter(Boolean).join(', ')
+
               return (
-                <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ flex: 1, minWidth: 180 }}>
+                <article key={booking.id} className="provider-job-row">
+                  <div>
                     <strong className="card-heading">
-                      <ServiceIcon name={service?.icon} size={16} />
-                      {service?.name ?? 'Service'}
+                      <ServiceIcon name={service?.icon} size={18} />
+                      {service?.name ?? 'Home service'}
                     </strong>
-                    <div className="muted" style={{ fontSize: 14 }}>
-                      {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-                      {where ? ` · ${where}` : ''}
+                    <div className="booking-row-meta">
+                      {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)}
                     </div>
+                    {where && <div className="booking-row-meta">{where}</div>}
                     {maps && (
-                      <a
-                        href={maps}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--brand)', fontSize: 13, fontWeight: 600 }}
-                      >
+                      <a href={maps} target="_blank" rel="noopener noreferrer" className="provider-link">
                         Open map
                       </a>
                     )}
-                    {b.notes?.trim() && (
-                      <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
-                        {b.notes.trim()}
+                    {booking.notes?.trim() && (
+                      <p className="muted" style={{ margin: '5px 0 0', fontSize: 13 }}>
+                        {booking.notes.trim()}
                       </p>
                     )}
                   </div>
-                  <ClaimBookingButton bookingId={b.id} />
-                </div>
+                  <ClaimBookingButton bookingId={booking.id} />
+                </article>
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="section">
-        <h2>Your jobs</h2>
-        <div className="card">
+      <section id="jobs" className="provider-section" aria-labelledby="jobs-heading">
+        <div className="dashboard-section-head">
+          <div>
+            <p className="dashboard-kicker">Your schedule</p>
+            <h2 id="jobs-heading">Your jobs</h2>
+          </div>
+        </div>
+        <div className="card provider-list-card">
           {myBookings.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              No jobs yet. Accept an offer above when one comes in.
-            </p>
+            <div className="empty-state">
+              <BriefcaseBusiness size={26} aria-hidden="true" />
+              <h3>No accepted jobs yet</h3>
+              <p className="muted">Accept an offer above when one becomes available.</p>
+            </div>
           )}
-          {myBookings.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
-            const canStart = b.status === 'confirmed'
-            const completable = b.status === 'confirmed' || b.status === 'in_progress'
+          {myBookings.map((booking) => {
+            const service = (booking.services ?? null) as { name: string; icon: string | null } | null
+            const canStart = booking.status === 'confirmed'
+            const completable = booking.status === 'confirmed' || booking.status === 'in_progress'
             const maps = mapsSearchUrl({
-              address_line1: b.address_line1,
-              city: b.city,
-              postal_code: b.postal_code,
+              address_line1: booking.address_line1,
+              city: booking.city,
+              postal_code: booking.postal_code,
             })
+
             return (
-              <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <article key={booking.id} className="provider-job-row">
                 <div>
                   <strong className="card-heading">
-                    <ServiceIcon name={service?.icon} size={16} />
-                    {service?.name ?? 'Service'}
+                    <ServiceIcon name={service?.icon} size={18} />
+                    {service?.name ?? 'Home service'}
                   </strong>
-                  <div className="muted" style={{ fontSize: 14 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-                    {b.city ? ` · ${b.city}` : ''}
+                  <div className="booking-row-meta">
+                    {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)}
+                    {booking.city ? ` · ${booking.city}` : ''}
                   </div>
                   {maps && completable && (
-                    <a
-                      href={maps}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: 'var(--brand)', fontSize: 13, fontWeight: 600 }}
-                    >
+                    <a href={maps} target="_blank" rel="noopener noreferrer" className="provider-link">
                       Open map
                     </a>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
-                  {canStart && <StartBookingButton bookingId={b.id} />}
-                  {completable && <ReleaseBookingButton bookingId={b.id} />}
-                  {completable && <CompleteBookingButton bookingId={b.id} />}
+                <div className="booking-row-actions">
+                  <span className={STATUS_TAG[booking.status] ?? 'tag'}>
+                    {STATUS_LABEL[booking.status] ?? booking.status}
+                  </span>
+                  {canStart && <StartBookingButton bookingId={booking.id} />}
+                  {completable && <ReleaseBookingButton bookingId={booking.id} />}
+                  {completable && <CompleteBookingButton bookingId={booking.id} />}
                 </div>
-              </div>
+              </article>
             )
           })}
         </div>
-      </div>
+      </section>
 
-      <div className="section">
-        <h2>Recent reviews</h2>
-        <div className="card">
+      <section className="provider-section" aria-labelledby="reviews-heading">
+        <div className="dashboard-section-head">
+          <div>
+            <p className="dashboard-kicker">Customer feedback</p>
+            <h2 id="reviews-heading">Recent reviews</h2>
+          </div>
+        </div>
+        <div className="card provider-list-card">
           {reviews.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              No reviews yet. They'll show up here once customers rate a
-              completed job.
-            </p>
-          )}
-          {reviews.map((r) => (
-            <div key={r.id} className="list-row" style={{ display: 'block' }}>
-              <div>
-                <span style={{ color: 'var(--brand)' }}>{'★'.repeat(r.rating)}</span>
-                <span className="muted">{'★'.repeat(5 - r.rating)}</span>
-              </div>
-              {r.comment && <p style={{ margin: '4px 0 0' }}>{r.comment}</p>}
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                {formatDateTime(r.created_at)}
-              </div>
+            <div className="empty-state">
+              <Star size={26} aria-hidden="true" />
+              <h3>No reviews yet</h3>
+              <p className="muted">Customer ratings will appear after completed jobs.</p>
             </div>
+          )}
+          {reviews.map((review) => (
+            <article key={review.id} className="provider-review-row">
+              <div aria-label={`${review.rating} out of 5 stars`}>
+                <span style={{ color: 'var(--brand)' }}>{'★'.repeat(review.rating)}</span>
+                <span className="muted">{'★'.repeat(5 - review.rating)}</span>
+              </div>
+              {review.comment && <p style={{ margin: '5px 0 0' }}>{review.comment}</p>}
+              <time className="activity-time" dateTime={review.created_at}>
+                {formatDateTime(review.created_at)}
+              </time>
+            </article>
           ))}
         </div>
-      </div>
+      </section>
 
       <p className="form-note">
-        <Link href="/dashboard" style={{ color: 'var(--brand)' }}>
-          Switch to customer dashboard
+        <Link href="/dashboard" className="provider-link">
+          Switch to the homeowner experience
         </Link>
       </p>
     </section>

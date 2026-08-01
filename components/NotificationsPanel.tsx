@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDateTime } from '@/lib/format'
 
@@ -15,19 +15,6 @@ export type Notification = {
   created_at: string
 }
 
-/**
- * In-app notification feed. Email delivery is handled separately by the
- * send-notifications edge function; this is the always-available surface so the
- * service loop never depends on an email provider being configured.
- *
- * Rows arrive over Realtime as booking triggers write them, so a customer
- * watching this page sees "a pro claimed your job" without refreshing.
- * RLS filters the stream server-side — a subscriber only ever receives rows
- * where `user_id = auth.uid()`.
- *
- * `userId` is optional: when omitted, the panel reads the signed-in user from
- * the browser client so existing call sites do not need to change.
- */
 export function NotificationsPanel({
   initial,
   userId: userIdProp,
@@ -37,9 +24,10 @@ export function NotificationsPanel({
 }) {
   const router = useRouter()
   const [items, setItems] = useState(initial)
+  const [expanded, setExpanded] = useState(false)
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set())
   const [resolvedUserId, setResolvedUserId] = useState<string | null>(userIdProp ?? null)
-  const unread = items.filter((n) => !n.read_at).length
+  const unread = items.filter((item) => !item.read_at).length
 
   useEffect(() => {
     if (userIdProp) {
@@ -83,8 +71,8 @@ export function NotificationsPanel({
         },
         (payload) => {
           const row = payload.new as Notification
-          setItems((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev]))
-          setLiveIds((prev) => new Set(prev).add(row.id))
+          setItems((previous) => (previous.some((item) => item.id === row.id) ? previous : [row, ...previous]))
+          setLiveIds((previous) => new Set(previous).add(row.id))
           router.refresh()
         },
       )
@@ -101,77 +89,97 @@ export function NotificationsPanel({
   }, [resolvedUserId, router])
 
   async function markAllRead() {
-    const ids = items.filter((n) => !n.read_at).map((n) => n.id)
+    const ids = items.filter((item) => !item.read_at).map((item) => item.id)
     if (ids.length === 0) return
 
     const now = new Date().toISOString()
-    setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: now })))
+    const before = items
+    setItems((previous) => previous.map((item) => (item.read_at ? item : { ...item, read_at: now })))
 
     const supabase = createClient()
-    await supabase.from('notifications').update({ read_at: now }).in('id', ids)
+    const { error } = await supabase.from('notifications').update({ read_at: now }).in('id', ids)
+    if (error) setItems(before)
   }
 
   if (items.length === 0) return null
 
+  const visibleItems = expanded ? items.slice(0, 20) : items.slice(0, 3)
+
   return (
-    <div className="card" style={{ marginTop: 18 }}>
-      <div className="list-row" style={{ paddingTop: 0, borderBottom: 'none' }}>
-        <h3 className="card-heading" style={{ margin: 0 }}>
-          <Bell size={18} /> Activity
+    <section id="activity" className="card activity-card" aria-labelledby="activity-heading">
+      <div className="activity-head">
+        <h2 id="activity-heading" className="card-heading" style={{ margin: 0, fontSize: 23 }}>
+          <Bell size={20} aria-hidden="true" /> Activity
           {unread > 0 && <span className="tag good">{unread} new</span>}
-        </h3>
-        {unread > 0 && (
-          <button type="button" className="btn btn-ghost" onClick={markAllRead}>
-            <Check size={15} /> Mark all read
-          </button>
-        )}
+        </h2>
+        <div className="activity-actions">
+          {unread > 0 && (
+            <button type="button" className="btn btn-ghost" onClick={markAllRead}>
+              <Check size={16} aria-hidden="true" /> Mark all read
+            </button>
+          )}
+        </div>
       </div>
 
-      <div style={{ marginTop: 6 }} aria-live="polite">
-        {items.slice(0, 8).map((n) => {
-          const isLive = liveIds.has(n.id)
+      <div id="activity-list" className="activity-list" aria-live="polite">
+        {visibleItems.map((item) => {
+          const isLive = liveIds.has(item.id)
           return (
-            <div
-              key={n.id}
-              className="list-row"
-              style={{
-                alignItems: 'flex-start',
-                opacity: isLive ? 1 : undefined,
-                transition: isLive ? 'background 0.35s ease' : undefined,
-                background: isLive ? 'rgba(193, 68, 14, 0.06)' : undefined,
-              }}
+            <article
+              key={item.id}
+              className="activity-row"
+              style={{ background: isLive ? 'rgba(189, 78, 38, 0.06)' : undefined }}
             >
               <div>
-                <strong style={{ fontWeight: n.read_at ? 500 : 700 }}>
-                  {!n.read_at && (
+                <strong style={{ fontWeight: item.read_at ? 600 : 800 }}>
+                  {!item.read_at && (
                     <span
                       aria-hidden="true"
                       style={{
                         display: 'inline-block',
-                        width: 7,
-                        height: 7,
+                        width: 8,
+                        height: 8,
                         borderRadius: '50%',
                         background: 'var(--brand)',
                         marginRight: 8,
-                        verticalAlign: 'middle',
                       }}
                     />
                   )}
-                  {n.title}
+                  {item.title}
                 </strong>
-                {n.body && (
-                  <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>
-                    {n.body}
-                  </div>
+                {item.body && (
+                  <p className="muted" style={{ margin: '4px 0 0', fontSize: 14 }}>
+                    {item.body}
+                  </p>
                 )}
               </div>
-              <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
-                {formatDateTime(n.created_at)}
-              </span>
-            </div>
+              <time className="activity-time" dateTime={item.created_at}>
+                {formatDateTime(item.created_at)}
+              </time>
+            </article>
           )
         })}
       </div>
-    </div>
+
+      {items.length > 3 && (
+        <button
+          type="button"
+          className="btn btn-ghost activity-toggle"
+          aria-expanded={expanded}
+          aria-controls="activity-list"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp size={17} aria-hidden="true" /> Show recent activity only
+            </>
+          ) : (
+            <>
+              <ChevronDown size={17} aria-hidden="true" /> View all activity ({items.length})
+            </>
+          )}
+        </button>
+      )}
+    </section>
   )
 }

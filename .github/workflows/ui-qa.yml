@@ -1,0 +1,92 @@
+name: UI QA
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  responsive-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://rzdavbuoisckvdapbcbj.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_x4MUHQBn3ceycJKfWu--jw_r3N5kyCz
+      NEXT_PUBLIC_SITE_URL: https://wurx.vercel.app
+      PLAYWRIGHT_SERVER_COMMAND: npm run start
+      WURX_UI_QA: '1'
+      WURX_REQUIRE_AUTH_QA: '1'
+      WURX_VISUAL_BASELINES: '0'
+      WURX_VISUAL_BASELINES_APPROVED: '0'
+      WURX_E2E_HOMEOWNER_EMAIL: ${{ secrets.WURX_E2E_HOMEOWNER_EMAIL }}
+      WURX_E2E_HOMEOWNER_PASSWORD: ${{ secrets.WURX_E2E_HOMEOWNER_PASSWORD }}
+      WURX_E2E_PROFESSIONAL_EMAIL: ${{ secrets.WURX_E2E_PROFESSIONAL_EMAIL }}
+      WURX_E2E_PROFESSIONAL_PASSWORD: ${{ secrets.WURX_E2E_PROFESSIONAL_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify authenticated QA credentials are configured
+        shell: bash
+        run: |
+          missing=0
+          for name in \
+            WURX_E2E_HOMEOWNER_EMAIL \
+            WURX_E2E_HOMEOWNER_PASSWORD \
+            WURX_E2E_PROFESSIONAL_EMAIL \
+            WURX_E2E_PROFESSIONAL_PASSWORD
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing UI QA secret::$name must be configured before authenticated release QA can run."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Keep visual baselines disabled pending screenshot approval
+        shell: bash
+        run: |
+          test "$WURX_VISUAL_BASELINES" = '0'
+          test "$WURX_VISUAL_BASELINES_APPROVED" = '0'
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked application and QA dependencies
+        run: npm ci
+
+      - name: Install stable Chrome and WebKit runtimes
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Capture Chrome and WebKit release matrix
+        run: npm run test:ui
+
+      - name: Create screenshot manifest
+        if: always()
+        run: |
+          mkdir -p artifacts/screenshots
+          find artifacts/screenshots -type f -name '*.png' -print0 | sort -z | xargs -0 -r sha256sum > artifacts/screenshots/SHA256SUMS.txt
+          find artifacts/screenshots -type f -maxdepth 3 | sort
+
+      - name: Upload UI evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: wurx-ui-qa-${{ github.run_id }}
+          path: |
+            artifacts/screenshots
+            artifacts/playwright-report
+            artifacts/playwright-results
+          if-no-files-found: warn
+          retention-days: 21

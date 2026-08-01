@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ArrowRight, Clock3, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinutes } from '@/lib/format'
 import { ServiceIcon } from '@/components/ServiceIcon'
@@ -17,48 +18,65 @@ export default async function ServicesPage() {
 
   return (
     <section className="container section">
-      <div className="hero" style={{ paddingBottom: 8 }}>
-        <h1>Services</h1>
+      <header className="hero pricing-intro" style={{ paddingBottom: 24 }}>
+        <span className="eyebrow">Home services</span>
+        <h1>One place for the work your home needs.</h1>
         <p>
-          Everything below is booked with the minutes in your plan. Minutes are
-          charged by the service&apos;s rate — shown per booking before you
-          confirm.
+          Browse the available services, typical visit length, and expected plan-time use. Wurx calculates the exact amount before every booking.
         </p>
-      </div>
+      </header>
 
-      <div className="grid grid-2">
-        {(services ?? []).map((s) => {
-          const cost = Math.ceil(
-            s.default_duration_minutes * Number(s.credit_multiplier),
-          )
+      <div className="grid grid-2 public-services-grid">
+        {(services ?? []).map((service) => {
+          const cost = Math.ceil(service.default_duration_minutes * Number(service.credit_multiplier))
           return (
-            <div key={s.slug} className="card">
-              <div className="list-row" style={{ paddingTop: 0 }}>
-                <h3 className="card-heading" style={{ margin: 0 }}>
-                  <ServiceIcon name={s.icon} />
-                  {s.name}
-                </h3>
-                {s.requires_licensed_provider && (
-                  <span className="tag warn">Licensed pro</span>
-                )}
+            <article key={service.slug} className="card">
+              <span className="icon-chip" aria-hidden="true">
+                <ServiceIcon name={service.icon} />
+              </span>
+              <div className="service-public-body">
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <h2 style={{ margin: 0, fontSize: 23 }}>{service.name}</h2>
+                  {service.requires_licensed_provider && (
+                    <span className="tag warn">
+                      <ShieldCheck size={13} aria-hidden="true" /> Licensed
+                    </span>
+                  )}
+                </div>
+                <p className="muted" style={{ margin: '8px 0 0' }}>
+                  {service.description ?? 'A vetted local professional handles this service for you.'}
+                </p>
+                <div className="service-public-meta">
+                  <span>
+                    <Clock3 size={15} aria-hidden="true" /> Typical visit: {formatMinutes(service.default_duration_minutes)}
+                  </span>
+                  <span>About {formatMinutes(cost)} of plan time</span>
+                </div>
               </div>
-              <p className="muted">{s.description ?? ''}</p>
-              <p className="muted">
-                Typical visit: {formatMinutes(s.default_duration_minutes)} ·
-                costs about {formatMinutes(cost)} of plan minutes
-              </p>
-            </div>
+              <div className="service-public-action">
+                <Link href={`/dashboard/book?service=${encodeURIComponent(service.slug)}`} className="btn">
+                  Book {service.name} <ArrowRight size={16} aria-hidden="true" />
+                </Link>
+              </div>
+            </article>
           )
         })}
       </div>
 
-      <p className="form-note">
-        Ready to book?{' '}
-        <Link href="/dashboard" style={{ color: 'var(--brand)' }}>
-          Go to your dashboard
+      {(services ?? []).length === 0 && (
+        <div className="card empty-state">
+          <h2 style={{ marginTop: 0 }}>Services are being prepared</h2>
+          <p className="muted">The local catalogue is temporarily unavailable. Check again shortly.</p>
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 22, textAlign: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: 25 }}>Ready to get something handled?</h2>
+        <p className="muted">Choose a service and Wurx will guide you through the booking one decision at a time.</p>
+        <Link href="/dashboard/book" className="btn btn-primary">
+          Book a service
         </Link>
-        .
-      </p>
+      </div>
     </section>
   )
 }

@@ -1,6 +1,10 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Bricolage_Grotesque, DM_Sans } from 'next/font/google'
 import './globals.css'
+import './wurx-ui.css'
+import './wurx-provider.css'
+import './wurx-states.css'
+import './wurx-release-fixes.css'
 import { SiteHeader } from '@/components/SiteHeader'
 
 const bricolage = Bricolage_Grotesque({
@@ -17,10 +21,20 @@ const dmSans = DM_Sans({
   display: 'swap',
 })
 
+const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://wurx.vercel.app'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(publicSiteUrl),
   title: 'Wurx — Subscription home services',
   description:
-    'A monthly subscription for home services in Ottawa. Book cleaning, snow removal, lawn care, handyman help and more with the minutes in your plan.',
+    'A monthly subscription for home services in Ottawa. Book cleaning, snow removal, lawn care, handyman help and more with the time in your plan.',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#f7f4ec',
 }
 
 export default function RootLayout({
@@ -31,12 +45,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${bricolage.variable} ${dmSans.variable}`}>
       <body>
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
         <SiteHeader />
-        <main>{children}</main>
+        <main id="main-content">{children}</main>
         <footer className="site-footer">
-          <div className="container inner" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div className="container inner">
             <span>© {new Date().getFullYear()} Wurx · Ottawa home services</span>
-            <span style={{ display: 'flex', gap: 16 }}>
+            <span className="footer-links">
               <a href="/terms">Terms</a>
               <a href="/privacy">Privacy</a>
             </span>
