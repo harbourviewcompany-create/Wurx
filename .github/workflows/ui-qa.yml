@@ -18,7 +18,9 @@ jobs:
       NEXT_PUBLIC_SITE_URL: https://wurx.vercel.app
       PLAYWRIGHT_SERVER_COMMAND: npm run start
       WURX_UI_QA: '1'
+      WURX_REQUIRE_AUTH_QA: '1'
       WURX_VISUAL_BASELINES: '0'
+      WURX_VISUAL_BASELINES_APPROVED: '0'
       WURX_E2E_HOMEOWNER_EMAIL: ${{ secrets.WURX_E2E_HOMEOWNER_EMAIL }}
       WURX_E2E_HOMEOWNER_PASSWORD: ${{ secrets.WURX_E2E_HOMEOWNER_PASSWORD }}
       WURX_E2E_PROFESSIONAL_EMAIL: ${{ secrets.WURX_E2E_PROFESSIONAL_EMAIL }}
@@ -28,6 +30,30 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify authenticated QA credentials are configured
+        shell: bash
+        run: |
+          missing=0
+          for name in \
+            WURX_E2E_HOMEOWNER_EMAIL \
+            WURX_E2E_HOMEOWNER_PASSWORD \
+            WURX_E2E_PROFESSIONAL_EMAIL \
+            WURX_E2E_PROFESSIONAL_PASSWORD
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing UI QA secret::$name must be configured before authenticated release QA can run."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Keep visual baselines disabled pending screenshot approval
+        shell: bash
+        run: |
+          test "$WURX_VISUAL_BASELINES" = '0'
+          test "$WURX_VISUAL_BASELINES_APPROVED" = '0'
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
