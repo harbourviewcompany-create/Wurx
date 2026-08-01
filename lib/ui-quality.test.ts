@@ -65,4 +65,18 @@ describe('Wurx August 2026 UI quality contracts', () => {
     expect(source('components/PayoutsCard.tsx')).toContain('id="earnings"')
     expect(source('components/NotificationsPanel.tsx')).toContain('id="activity"')
   })
+
+  it('requires authenticated release evidence on the exact PR head', () => {
+    const workflow = source('.github/workflows/ui-qa.yml')
+    const playwright = source('tests/e2e/wurx-visual.pw.mjs')
+
+    expect(workflow).toContain("WURX_REQUIRE_AUTH_QA: '1'")
+    expect(workflow).toContain('Verify authenticated QA credentials are configured')
+    expect(workflow).toContain('github.event.pull_request.head.sha')
+    expect(workflow).toContain("WURX_VISUAL_BASELINES: '0'")
+    expect(workflow).toContain("WURX_VISUAL_BASELINES_APPROVED: '0'")
+    expect(playwright).toContain("process.env.WURX_REQUIRE_AUTH_QA === '1'")
+    expect(playwright).toContain('Authenticated UI QA is required')
+    expect(playwright).toContain('Visual baseline comparison cannot be enabled')
+  })
 })
