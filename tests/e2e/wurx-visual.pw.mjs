@@ -23,10 +23,31 @@ const credentials = {
   },
 }
 
+const authQaRequired = process.env.WURX_REQUIRE_AUTH_QA === '1'
 const visualBaselinesEnabled = process.env.WURX_VISUAL_BASELINES === '1'
+const visualBaselinesApproved = process.env.WURX_VISUAL_BASELINES_APPROVED === '1'
 
 function hasCredentials(account) {
   return Boolean(account.email && account.password)
+}
+
+if (authQaRequired) {
+  const missing = []
+  if (!credentials.homeowner.email) missing.push('WURX_E2E_HOMEOWNER_EMAIL')
+  if (!credentials.homeowner.password) missing.push('WURX_E2E_HOMEOWNER_PASSWORD')
+  if (!credentials.professional.email) missing.push('WURX_E2E_PROFESSIONAL_EMAIL')
+  if (!credentials.professional.password) missing.push('WURX_E2E_PROFESSIONAL_PASSWORD')
+  if (missing.length) {
+    throw new Error(
+      `Authenticated UI QA is required, but these credentials are missing: ${missing.join(', ')}`,
+    )
+  }
+}
+
+if (visualBaselinesEnabled && !visualBaselinesApproved) {
+  throw new Error(
+    'Visual baseline comparison cannot be enabled until WURX_VISUAL_BASELINES_APPROVED=1 after screenshot approval.',
+  )
 }
 
 function isRepresentativeMobile(testInfo) {
