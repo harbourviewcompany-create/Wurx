@@ -77,6 +77,7 @@ describe('crash recovery and duplicate-send prevention', () => {
     )
     expect(edge).toContain('await recoverStaleDeliveries(supabase)')
     expect(edge).toContain("'recover_stale_notification_deliveries'")
+    expect(edge).toContain('staleMovedToReconciliation: staleRecovered')
   })
 
   it('stops automatic resend after an ambiguous provider outcome', () => {
