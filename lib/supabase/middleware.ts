@@ -14,26 +14,22 @@ const PROTECTED_PREFIXES = ['/dashboard', '/provider/dashboard', '/admin']
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request })
 
-  const supabase = createServerClient<Database>(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          )
-          response = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          )
-        },
+  const supabase = createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => {
+          request.cookies.set(name, value)
+        })
+        response = NextResponse.next({ request })
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options)
+        })
       },
     },
-  )
+  })
 
   // IMPORTANT: getUser() revalidates the token with Supabase — do not replace
   // with getSession(), which trusts unverified cookie contents.
@@ -51,12 +47,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  const needsAuth = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))
+  const needsAuth = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
   if (needsAuth && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('redirect', pathname)
+    url.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }
 
