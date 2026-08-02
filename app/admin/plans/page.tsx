@@ -17,28 +17,36 @@ type Plan = {
 }
 
 function PlanForm({ plan }: { plan?: Plan }) {
+  const fieldPrefix = plan ? `plan-${plan.id}` : 'new-plan'
+
   return (
     <form action={savePlan} className="card" style={{ marginTop: 14 }}>
       {plan && <input type="hidden" name="id" value={plan.id} />}
 
       <div className="grid grid-2">
         <div>
-          <label>Name</label>
-          <input name="name" defaultValue={plan?.name} required />
+          <label htmlFor={`${fieldPrefix}-name`}>Name</label>
+          <input id={`${fieldPrefix}-name`} name="name" defaultValue={plan?.name} required />
         </div>
         <div>
-          <label>Slug</label>
-          <input name="slug" defaultValue={plan?.slug} required />
+          <label htmlFor={`${fieldPrefix}-slug`}>Slug</label>
+          <input id={`${fieldPrefix}-slug`} name="slug" defaultValue={plan?.slug} required />
         </div>
       </div>
 
-      <label>Description</label>
-      <textarea name="description" defaultValue={plan?.description ?? ''} rows={2} />
+      <label htmlFor={`${fieldPrefix}-description`}>Description</label>
+      <textarea
+        id={`${fieldPrefix}-description`}
+        name="description"
+        defaultValue={plan?.description ?? ''}
+        rows={2}
+      />
 
       <div className="grid grid-3">
         <div>
-          <label>Price (cents)</label>
+          <label htmlFor={`${fieldPrefix}-price-cents`}>Price (cents)</label>
           <input
+            id={`${fieldPrefix}-price-cents`}
             name="price_cents"
             type="number"
             min={0}
@@ -47,8 +55,9 @@ function PlanForm({ plan }: { plan?: Plan }) {
           />
         </div>
         <div>
-          <label>Monthly minutes</label>
+          <label htmlFor={`${fieldPrefix}-monthly-minutes`}>Monthly minutes</label>
           <input
+            id={`${fieldPrefix}-monthly-minutes`}
             name="monthly_minutes"
             type="number"
             min={0}
@@ -57,13 +66,23 @@ function PlanForm({ plan }: { plan?: Plan }) {
           />
         </div>
         <div>
-          <label>Sort order</label>
-          <input name="sort_order" type="number" defaultValue={plan?.sort_order ?? 0} />
+          <label htmlFor={`${fieldPrefix}-sort-order`}>Sort order</label>
+          <input
+            id={`${fieldPrefix}-sort-order`}
+            name="sort_order"
+            type="number"
+            defaultValue={plan?.sort_order ?? 0}
+          />
         </div>
       </div>
 
-      <label>Stripe price ID</label>
-      <input name="stripe_price_id" defaultValue={plan?.stripe_price_id ?? ''} placeholder="price_..." />
+      <label htmlFor={`${fieldPrefix}-stripe-price-id`}>Stripe price ID</label>
+      <input
+        id={`${fieldPrefix}-stripe-price-id`}
+        name="stripe_price_id"
+        defaultValue={plan?.stripe_price_id ?? ''}
+        placeholder="price_..."
+      />
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <input
@@ -95,16 +114,16 @@ export default async function AdminPlansPage() {
       <PlanForm />
 
       <h2 style={{ fontSize: 20, marginTop: 32 }}>Existing plans</h2>
-      {(plans ?? []).map((p) => (
-        <details key={p.id} style={{ marginTop: 10 }}>
+      {(plans ?? []).map((plan) => (
+        <details key={plan.id} style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', padding: '10px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <strong>{p.name}</strong>
+            <strong>{plan.name}</strong>
             <span className="muted">
-              {formatPrice(p.price_cents)}/mo · {formatMinutes(p.monthly_minutes)}
+              {formatPrice(plan.price_cents)}/mo · {formatMinutes(plan.monthly_minutes)}
             </span>
-            {!p.is_active && <span className="tag warn">inactive</span>}
+            {!plan.is_active && <span className="tag warn">inactive</span>}
           </summary>
-          <PlanForm plan={p as Plan} />
+          <PlanForm plan={plan as Plan} />
         </details>
       ))}
     </div>
