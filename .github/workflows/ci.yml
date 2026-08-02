@@ -6,14 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Pinned to commit SHAs, matching how the Datadog action is pinned in
-      # datadog-synthetics.yml. persist-credentials: false keeps GITHUB_TOKEN
-      # out of .git/config — the steps below run npm scripts and dependency
-      # postinstalls, and nothing here pushes.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
@@ -29,14 +28,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint
+        run: npm run lint
+
       - name: Unit tests
         run: npm test
 
       - name: Build
         run: npm run build
         env:
-          # Public build-time values. Real secrets are configured in Vercel;
-          # these placeholders only need to be well-formed for `next build`.
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           NEXT_PUBLIC_SITE_URL: https://wurx.vercel.app
