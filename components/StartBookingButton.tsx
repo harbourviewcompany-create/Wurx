@@ -24,7 +24,7 @@ export function StartBookingButton({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <button className="btn btn-primary" onClick={start} disabled={loading}>
+    <button type="button" className="btn btn-primary" onClick={start} disabled={loading}>
       {loading ? '…' : 'Start job'}
     </button>
   )
