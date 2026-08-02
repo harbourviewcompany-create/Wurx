@@ -19,39 +19,54 @@ type Service = {
 }
 
 function ServiceForm({ service }: { service?: Service }) {
+  const fieldPrefix = service ? `service-${service.id}` : 'new-service'
+
   return (
     <form action={saveService} className="card" style={{ marginTop: 14 }}>
       {service && <input type="hidden" name="id" value={service.id} />}
 
       <div className="grid grid-2">
         <div>
-          <label>Name</label>
-          <input name="name" defaultValue={service?.name} required />
+          <label htmlFor={`${fieldPrefix}-name`}>Name</label>
+          <input id={`${fieldPrefix}-name`} name="name" defaultValue={service?.name} required />
         </div>
         <div>
-          <label>Slug</label>
-          <input name="slug" defaultValue={service?.slug} required />
+          <label htmlFor={`${fieldPrefix}-slug`}>Slug</label>
+          <input id={`${fieldPrefix}-slug`} name="slug" defaultValue={service?.slug} required />
         </div>
       </div>
 
       <div className="grid grid-2">
         <div>
-          <label>Icon (lucide name: sparkles, snowflake, leaf, wrench, trash, home)</label>
-          <input name="icon" defaultValue={service?.icon ?? ''} />
+          <label htmlFor={`${fieldPrefix}-icon`}>
+            Icon (lucide name: sparkles, snowflake, leaf, wrench, trash, home)
+          </label>
+          <input id={`${fieldPrefix}-icon`} name="icon" defaultValue={service?.icon ?? ''} />
         </div>
         <div>
-          <label>Sort order</label>
-          <input name="sort_order" type="number" defaultValue={service?.sort_order ?? 0} />
+          <label htmlFor={`${fieldPrefix}-sort-order`}>Sort order</label>
+          <input
+            id={`${fieldPrefix}-sort-order`}
+            name="sort_order"
+            type="number"
+            defaultValue={service?.sort_order ?? 0}
+          />
         </div>
       </div>
 
-      <label>Description</label>
-      <textarea name="description" defaultValue={service?.description ?? ''} rows={2} />
+      <label htmlFor={`${fieldPrefix}-description`}>Description</label>
+      <textarea
+        id={`${fieldPrefix}-description`}
+        name="description"
+        defaultValue={service?.description ?? ''}
+        rows={2}
+      />
 
       <div className="grid grid-3">
         <div>
-          <label>Default duration (minutes)</label>
+          <label htmlFor={`${fieldPrefix}-duration`}>Default duration (minutes)</label>
           <input
+            id={`${fieldPrefix}-duration`}
             name="default_duration_minutes"
             type="number"
             min={15}
@@ -61,8 +76,9 @@ function ServiceForm({ service }: { service?: Service }) {
           />
         </div>
         <div>
-          <label>Credit multiplier</label>
+          <label htmlFor={`${fieldPrefix}-multiplier`}>Credit multiplier</label>
           <input
+            id={`${fieldPrefix}-multiplier`}
             name="credit_multiplier"
             type="number"
             step="0.1"
@@ -72,8 +88,9 @@ function ServiceForm({ service }: { service?: Service }) {
           />
         </div>
         <div>
-          <label>Provider rate (¢/hr)</label>
+          <label htmlFor={`${fieldPrefix}-provider-rate`}>Provider rate (¢/hr)</label>
           <input
+            id={`${fieldPrefix}-provider-rate`}
             name="provider_rate_cents_per_hour"
             type="number"
             defaultValue={service?.provider_rate_cents_per_hour ?? ''}
@@ -123,14 +140,14 @@ export default async function AdminServicesPage() {
       <ServiceForm />
 
       <h2 style={{ fontSize: 20, marginTop: 32 }}>Existing services</h2>
-      {(services ?? []).map((s) => (
-        <details key={s.id} style={{ marginTop: 10 }}>
+      {(services ?? []).map((service) => (
+        <details key={service.id} style={{ marginTop: 10 }}>
           <summary className="card-heading" style={{ cursor: 'pointer', padding: '10px 0' }}>
-            <ServiceIcon name={s.icon} />
-            {s.name}
-            {!s.is_active && <span className="tag warn">inactive</span>}
+            <ServiceIcon name={service.icon} />
+            {service.name}
+            {!service.is_active && <span className="tag warn">inactive</span>}
           </summary>
-          <ServiceForm service={s as Service} />
+          <ServiceForm service={service as Service} />
         </details>
       ))}
     </div>
