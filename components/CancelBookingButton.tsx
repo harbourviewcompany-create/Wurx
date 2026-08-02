@@ -24,7 +24,7 @@ export function CancelBookingButton({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <button className="btn btn-ghost" onClick={cancel} disabled={loading}>
+    <button type="button" className="btn btn-ghost" onClick={cancel} disabled={loading}>
       {loading ? '…' : 'Cancel'}
     </button>
   )
