@@ -225,7 +225,7 @@ export function AvailabilityEditor({
                 {new Date(b.ends_at).toLocaleString()}
                 {b.reason && <div className="muted" style={{ fontSize: 14 }}>{b.reason}</div>}
               </div>
-              <button className="btn btn-ghost" onClick={() => removeBlackout(b.id)}>
+              <button type="button" className="btn btn-ghost" onClick={() => removeBlackout(b.id)}>
                 Remove
               </button>
             </div>
