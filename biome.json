@@ -16,9 +16,6 @@
       "correctness": {
         "useUniqueElementIds": "off"
       },
-      "suspicious": {
-        "noArrayIndexKey": "off"
-      },
       "a11y": {
         "useSemanticElements": "off",
         "useAriaPropsSupportedByRole": "off"
