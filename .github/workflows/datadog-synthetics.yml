@@ -1,47 +1,47 @@
-# This workflow will trigger Datadog Synthetic tests within your Datadog organisation
-# For more information on running Synthetic tests within your GitHub workflows see: https://docs.datadoghq.com/synthetics/cicd_integrations/github_actions/
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# To get started:
-
-# 1. Add your Datadog API (DD_API_KEY) and Application Key (DD_APP_KEY) as secrets to your GitHub repository. For more information, see: https://docs.datadoghq.com/account_management/api-app-keys/.
-# 2. Start using the action within your workflow
-
-name: Run Datadog Synthetic tests
+name: Production verification
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  # Named `synthetics`, not `build`: ci.yml already has a `build` job, and two
-  # same-named jobs render as two indistinguishable "build" checks on every PR.
-  synthetics:
+  production-verification:
     runs-on: ubuntu-latest
     env:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+      PRODUCTION_BASE_URL: https://wurx.vercel.app
 
     steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      with:
-        persist-credentials: false
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
-    # Skip cleanly when Datadog credentials are not configured, instead of
-    # failing every pull request. Add DD_API_KEY / DD_APP_KEY repository secrets
-    # to enable the synthetic tests.
-    - name: Run Datadog Synthetic tests
-      if: ${{ env.DD_API_KEY != '' && env.DD_APP_KEY != '' }}
-      uses: DataDog/synthetics-ci-github-action@87b505388a22005bb8013481e3f73a367b9a53eb # v1.4.0
-      with:
-        api_key: ${{ secrets.DD_API_KEY }}
-        app_key: ${{ secrets.DD_APP_KEY }}
-        test_search_query: 'tag:e2e-tests' #Modify this tag to suit your tagging strategy
+      - name: Verify Datadog credentials are configured
+        shell: bash
+        run: |
+          missing=()
+          [[ -n "$DD_API_KEY" ]] || missing+=("DD_API_KEY")
+          [[ -n "$DD_APP_KEY" ]] || missing+=("DD_APP_KEY")
 
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub Actions secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Configure them under Repository settings > Secrets and variables > Actions.\n' >&2
+            exit 1
+          fi
 
+      - name: Run production HTTP smoke checks
+        run: node scripts/production-http-smoke.mjs
+
+      - name: Run Datadog Synthetic tests
+        uses: DataDog/synthetics-ci-github-action@87b505388a22005bb8013481e3f73a367b9a53eb # v1.4.0
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          app_key: ${{ secrets.DD_APP_KEY }}
+          test_search_query: 'tag:e2e-tests'
