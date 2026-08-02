@@ -25,6 +25,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Capture production dependency audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --json > npm-audit.json
+          status=$?
+          set -e
+          cat npm-audit.json
+          echo "npm_audit_exit=$status"
+
       - name: Typecheck
         run: npm run typecheck
 
