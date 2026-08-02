@@ -35,6 +35,7 @@ export function OfferRespondButtons({
       style={fullWidth ? undefined : { display: 'flex', gap: 8 }}
     >
       <button
+        type="button"
         className="btn btn-primary"
         onClick={() => respond(true)}
         disabled={loading !== null}
@@ -43,6 +44,7 @@ export function OfferRespondButtons({
         {loading === 'accept' ? '…' : 'Accept job'}
       </button>
       <button
+        type="button"
         className="btn btn-ghost"
         onClick={() => respond(false)}
         disabled={loading !== null}
