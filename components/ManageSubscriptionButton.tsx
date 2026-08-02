@@ -27,15 +27,15 @@ export function ManageSubscriptionButton() {
       if (!data?.url) throw new Error('Could not open the billing portal.')
 
       window.location.href = data.url
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Something went wrong.')
       setLoading(false)
     }
   }
 
   return (
     <>
-      <button className="btn" onClick={open} disabled={loading}>
+      <button type="button" className="btn" onClick={open} disabled={loading}>
         <CreditCard size={16} />
         {loading ? 'Opening…' : 'Manage subscription'}
       </button>
