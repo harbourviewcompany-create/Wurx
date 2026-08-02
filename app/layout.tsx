@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Bricolage_Grotesque, DM_Sans } from 'next/font/google'
 import './globals.css'
 import { SiteHeader } from '@/components/SiteHeader'
+import { SITE_URL } from '@/lib/env'
 
 const bricolage = Bricolage_Grotesque({
   subsets: ['latin'],
@@ -18,6 +19,7 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'Wurx — Subscription home services',
   description:
     'A monthly subscription for home services in Ottawa. Book cleaning, snow removal, lawn care, handyman help and more with the minutes in your plan.',
