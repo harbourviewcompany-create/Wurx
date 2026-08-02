@@ -44,7 +44,7 @@ export function ReviewForm({ bookingId, providerId }: { bookingId: string; provi
   if (!open) {
     return (
       <div style={{ width: '100%', marginTop: 8 }}>
-        <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+        <button type="button" className="btn btn-ghost" onClick={() => setOpen(true)}>
           Leave a review
         </button>
       </div>
@@ -55,18 +55,18 @@ export function ReviewForm({ bookingId, providerId }: { bookingId: string; provi
     <div className="card" style={{ width: '100%', marginTop: 8 }}>
       {error && <div className="form-error">{error}</div>}
       <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-        {[1, 2, 3, 4, 5].map((n) => (
+        {[1, 2, 3, 4, 5].map((score) => (
           <button
-            key={n}
+            key={score}
             type="button"
-            onClick={() => setRating(n)}
-            aria-label={`${n} star${n > 1 ? 's' : ''}`}
+            onClick={() => setRating(score)}
+            aria-label={`${score} star${score > 1 ? 's' : ''}`}
             style={{
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               fontSize: 22,
-              color: n <= rating ? 'var(--brand)' : 'var(--muted, #999)',
+              color: score <= rating ? 'var(--brand)' : 'var(--muted, #999)',
               padding: 0,
             }}
           >
@@ -77,14 +77,19 @@ export function ReviewForm({ bookingId, providerId }: { bookingId: string; provi
       <textarea
         rows={2}
         value={comment}
-        onChange={(e) => setComment(e.target.value)}
+        onChange={(event) => setComment(event.target.value)}
         placeholder="How did it go? (optional)"
       />
       <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-        <button className="btn btn-primary" onClick={submit} disabled={loading}>
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={loading}>
           {loading ? 'Submitting…' : 'Submit review'}
         </button>
-        <button className="btn btn-ghost" onClick={() => setOpen(false)} disabled={loading}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => setOpen(false)}
+          disabled={loading}
+        >
           Cancel
         </button>
       </div>

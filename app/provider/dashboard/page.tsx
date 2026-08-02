@@ -26,6 +26,36 @@ function minutesLeft(expiresAt: string): number {
   return Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60000))
 }
 
+type BookingSnippet = {
+  id: string
+  scheduled_start: string
+  duration_minutes: number
+  address_line1?: string | null
+  city: string | null
+  postal_code?: string | null
+  notes?: string | null
+  status?: string
+  provider_id?: string | null
+  services: { name: string; icon: string | null } | null
+}
+
+type OfferWithBooking = {
+  id: string
+  expires_at: string
+  booking: BookingSnippet
+}
+
+function hasRequestableBooking(offer: {
+  id: string
+  expires_at: string
+  booking: BookingSnippet | null
+}): offer is OfferWithBooking {
+  return (
+    offer.booking?.status === 'requested' &&
+    !offer.booking.provider_id
+  )
+}
+
 export default async function ProviderDashboard() {
   const supabase = await createClient()
 
@@ -98,32 +128,16 @@ export default async function ProviderDashboard() {
     .filter((e) => e.paid_out_at)
     .reduce((sum, e) => sum + (e.net_cents ?? 0), 0)
 
-  type BookingSnippet = {
-    id: string
-    scheduled_start: string
-    duration_minutes: number
-    address_line1?: string | null
-    city: string | null
-    postal_code?: string | null
-    notes?: string | null
-    status?: string
-    provider_id?: string | null
-    services: { name: string; icon: string | null } | null
-  }
-
   const offers = (offersRes.data ?? [])
-    .map((o) => {
-      const booking = (o.bookings ?? null) as BookingSnippet | null
-      return {
-        id: o.id,
-        expires_at: o.expires_at,
-        booking,
-      }
-    })
-    .filter((o) => o.booking && o.booking.status === 'requested' && !o.booking.provider_id)
+    .map((offer) => ({
+      id: offer.id,
+      expires_at: offer.expires_at,
+      booking: (offer.bookings ?? null) as BookingSnippet | null,
+    }))
+    .filter(hasRequestableBooking)
 
-  const offeredBookingIds = new Set(offers.map((o) => o.booking!.id))
-  const openJobs = (openRes.data ?? []).filter((b) => !offeredBookingIds.has(b.id))
+  const offeredBookingIds = new Set(offers.map((offer) => offer.booking.id))
+  const openJobs = (openRes.data ?? []).filter((booking) => !offeredBookingIds.has(booking.id))
   const myBookings = myBookingsRes.data ?? []
   const reviews = reviewsRes.data ?? []
 
@@ -179,25 +193,27 @@ export default async function ProviderDashboard() {
               up here automatically.
             </p>
           )}
-          {offers.map((o) => {
-            const b = o.booking!
-            const service = b.services
-            const left = minutesLeft(o.expires_at)
+          {offers.map((offer) => {
+            const booking = offer.booking
+            const service = booking.services
+            const left = minutesLeft(offer.expires_at)
             const maps = mapsSearchUrl({
-              address_line1: b.address_line1,
-              city: b.city,
-              postal_code: b.postal_code,
+              address_line1: booking.address_line1,
+              city: booking.city,
+              postal_code: booking.postal_code,
             })
-            const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
+            const where = [booking.address_line1, booking.city, booking.postal_code]
+              .filter(Boolean)
+              .join(', ')
             return (
-              <div key={o.id} className="offer-card">
+              <div key={offer.id} className="offer-card">
                 <div className="offer-card-main">
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
                     {service?.name ?? 'Service'}
                   </strong>
                   <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)} on site
+                    {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)} on site
                   </div>
                   {where && (
                     <div className="muted" style={{ fontSize: 14, marginTop: 6 }}>
@@ -218,17 +234,17 @@ export default async function ProviderDashboard() {
                       )}
                     </div>
                   )}
-                  {b.notes?.trim() && (
+                  {booking.notes?.trim() && (
                     <p style={{ margin: '8px 0 0', fontSize: 14 }}>
                       <span className="muted">Notes: </span>
-                      {b.notes.trim()}
+                      {booking.notes.trim()}
                     </p>
                   )}
                   <div className={left <= 5 ? 'tag warn' : 'tag'} style={{ marginTop: 10 }}>
                     {left <= 0 ? 'Expiring…' : `${left} min left to accept`}
                   </div>
                 </div>
-                <OfferRespondButtons offerId={o.id} fullWidth />
+                <OfferRespondButtons offerId={offer.id} fullWidth />
               </div>
             )
           })}
@@ -243,23 +259,25 @@ export default async function ProviderDashboard() {
             it.
           </p>
           <div className="card">
-            {openJobs.map((b) => {
-              const service = (b.services ?? null) as { name: string; icon: string | null } | null
+            {openJobs.map((booking) => {
+              const service = (booking.services ?? null) as { name: string; icon: string | null } | null
               const maps = mapsSearchUrl({
-                address_line1: b.address_line1,
-                city: b.city,
-                postal_code: b.postal_code,
+                address_line1: booking.address_line1,
+                city: booking.city,
+                postal_code: booking.postal_code,
               })
-              const where = [b.address_line1, b.city, b.postal_code].filter(Boolean).join(', ')
+              const where = [booking.address_line1, booking.city, booking.postal_code]
+                .filter(Boolean)
+                .join(', ')
               return (
-                <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
+                <div key={booking.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
                     <strong className="card-heading">
                       <ServiceIcon name={service?.icon} size={16} />
                       {service?.name ?? 'Service'}
                     </strong>
                     <div className="muted" style={{ fontSize: 14 }}>
-                      {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
+                      {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)}
                       {where ? ` · ${where}` : ''}
                     </div>
                     {maps && (
@@ -272,13 +290,13 @@ export default async function ProviderDashboard() {
                         Open map
                       </a>
                     )}
-                    {b.notes?.trim() && (
+                    {booking.notes?.trim() && (
                       <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
-                        {b.notes.trim()}
+                        {booking.notes.trim()}
                       </p>
                     )}
                   </div>
-                  <ClaimBookingButton bookingId={b.id} />
+                  <ClaimBookingButton bookingId={booking.id} />
                 </div>
               )
             })}
@@ -294,25 +312,25 @@ export default async function ProviderDashboard() {
               No jobs yet. Accept an offer above when one comes in.
             </p>
           )}
-          {myBookings.map((b) => {
-            const service = (b.services ?? null) as { name: string; icon: string | null } | null
-            const canStart = b.status === 'confirmed'
-            const completable = b.status === 'confirmed' || b.status === 'in_progress'
+          {myBookings.map((booking) => {
+            const service = (booking.services ?? null) as { name: string; icon: string | null } | null
+            const canStart = booking.status === 'confirmed'
+            const completable = booking.status === 'confirmed' || booking.status === 'in_progress'
             const maps = mapsSearchUrl({
-              address_line1: b.address_line1,
-              city: b.city,
-              postal_code: b.postal_code,
+              address_line1: booking.address_line1,
+              city: booking.city,
+              postal_code: booking.postal_code,
             })
             return (
-              <div key={b.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <div key={booking.id} className="list-row" style={{ flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <strong className="card-heading">
                     <ServiceIcon name={service?.icon} size={16} />
                     {service?.name ?? 'Service'}
                   </strong>
                   <div className="muted" style={{ fontSize: 14 }}>
-                    {formatDateTime(b.scheduled_start)} · {formatMinutes(b.duration_minutes)}
-                    {b.city ? ` · ${b.city}` : ''}
+                    {formatDateTime(booking.scheduled_start)} · {formatMinutes(booking.duration_minutes)}
+                    {booking.city ? ` · ${booking.city}` : ''}
                   </div>
                   {maps && completable && (
                     <a
@@ -326,10 +344,10 @@ export default async function ProviderDashboard() {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span className={STATUS_TAG[b.status] ?? 'tag'}>{b.status}</span>
-                  {canStart && <StartBookingButton bookingId={b.id} />}
-                  {completable && <ReleaseBookingButton bookingId={b.id} />}
-                  {completable && <CompleteBookingButton bookingId={b.id} />}
+                  <span className={STATUS_TAG[booking.status] ?? 'tag'}>{booking.status}</span>
+                  {canStart && <StartBookingButton bookingId={booking.id} />}
+                  {completable && <ReleaseBookingButton bookingId={booking.id} />}
+                  {completable && <CompleteBookingButton bookingId={booking.id} />}
                 </div>
               </div>
             )
@@ -346,15 +364,15 @@ export default async function ProviderDashboard() {
               completed job.
             </p>
           )}
-          {reviews.map((r) => (
-            <div key={r.id} className="list-row" style={{ display: 'block' }}>
+          {reviews.map((review) => (
+            <div key={review.id} className="list-row" style={{ display: 'block' }}>
               <div>
-                <span style={{ color: 'var(--brand)' }}>{'★'.repeat(r.rating)}</span>
-                <span className="muted">{'★'.repeat(5 - r.rating)}</span>
+                <span style={{ color: 'var(--brand)' }}>{'★'.repeat(review.rating)}</span>
+                <span className="muted">{'★'.repeat(5 - review.rating)}</span>
               </div>
-              {r.comment && <p style={{ margin: '4px 0 0' }}>{r.comment}</p>}
+              {review.comment && <p style={{ margin: '4px 0 0' }}>{review.comment}</p>}
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                {formatDateTime(r.created_at)}
+                {formatDateTime(review.created_at)}
               </div>
             </div>
           ))}

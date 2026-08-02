@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 
-export default function Error({
+export default function ErrorBoundary({
   error,
   reset,
 }: {
@@ -21,7 +21,7 @@ export default function Error({
         Give it another try. If this keeps happening, let us know.
       </p>
       <div className="cta">
-        <button className="btn btn-primary" onClick={() => reset()}>
+        <button type="button" className="btn btn-primary" onClick={() => reset()}>
           Try again
         </button>
         <a href="/" className="btn">

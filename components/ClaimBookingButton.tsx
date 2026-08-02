@@ -23,7 +23,7 @@ export function ClaimBookingButton({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <button className="btn btn-primary" onClick={claim} disabled={loading}>
+    <button type="button" className="btn btn-primary" onClick={claim} disabled={loading}>
       {loading ? '…' : 'Claim job'}
     </button>
   )

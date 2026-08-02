@@ -190,7 +190,7 @@ export default async function Dashboard({
           .in('booking_id', completedIds)
       : { data: [] as { booking_id: string; storage_path: string; caption: string | null }[] }
 
-  const photosByBooking = new Map<string, { url: string; caption: string | null }[]>()
+  const photosByBooking = new Map<string, { key: string; url: string; caption: string | null }[]>()
   if (photoRows && photoRows.length > 0) {
     const paths = photoRows.map((p) => p.storage_path)
     const { data: signed } = await supabase.storage
@@ -201,7 +201,7 @@ export default async function Dashboard({
       const url = urlByPath.get(row.storage_path)
       if (!url) continue
       const list = photosByBooking.get(row.booking_id) ?? []
-      list.push({ url, caption: row.caption })
+      list.push({ key: row.storage_path, url, caption: row.caption })
       photosByBooking.set(row.booking_id, list)
     }
   }
@@ -474,9 +474,9 @@ export default async function Dashboard({
                 )}
                 {(photosByBooking.get(b.id) ?? []).length > 0 && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', width: '100%' }}>
-                    {(photosByBooking.get(b.id) ?? []).map((photo, i) => (
+                    {(photosByBooking.get(b.id) ?? []).map((photo) => (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <a key={i} href={photo.url} target="_blank" rel="noreferrer">
+                      <a key={photo.key} href={photo.url} target="_blank" rel="noreferrer">
                         <img
                           src={photo.url}
                           alt={photo.caption ?? 'Completed job photo'}
