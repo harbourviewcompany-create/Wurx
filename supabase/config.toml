@@ -9,3 +9,8 @@ verify_jwt = true
 # the webhook signature inside the function. JWT verification must stay OFF.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Manual replay operates only on previously signature-verified inbox events and
+# is restricted to authenticated Wurx admins inside the function.
+[functions.stripe-replay]
+verify_jwt = true
