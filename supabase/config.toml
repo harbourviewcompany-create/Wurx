@@ -18,3 +18,8 @@ verify_jwt = true
 # Provider onboarding, status, and admin payouts require an authenticated caller.
 [functions.provider-payouts]
 verify_jwt = true
+
+# Scheduled notification dispatch cannot present a user JWT. It is authenticated
+# by the mandatory NOTIFY_DISPATCH_SECRET checked inside the function.
+[functions.send-notifications]
+verify_jwt = false
