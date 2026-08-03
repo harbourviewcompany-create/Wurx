@@ -29,7 +29,7 @@ export function ReleaseBookingButton({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <button className="btn btn-ghost" onClick={release} disabled={loading}>
+    <button type="button" className="btn btn-ghost" onClick={release} disabled={loading}>
       {loading ? '…' : "Can't make it"}
     </button>
   )

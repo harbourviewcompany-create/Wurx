@@ -187,7 +187,7 @@ export default async function Dashboard({
           .in('booking_id', completedIds)
       : { data: [] as { booking_id: string; storage_path: string; caption: string | null }[] }
 
-  const photosByBooking = new Map<string, { url: string; caption: string | null }[]>()
+  const photosByBooking = new Map<string, { key: string; url: string; caption: string | null }[]>()
   if (photoRows && photoRows.length > 0) {
     const paths = photoRows.map((photo) => photo.storage_path)
     const { data: signed } = await supabase.storage.from('job-photos').createSignedUrls(paths, 3600)
@@ -196,7 +196,7 @@ export default async function Dashboard({
       const url = urlByPath.get(row.storage_path)
       if (!url) continue
       const list = photosByBooking.get(row.booking_id) ?? []
-      list.push({ url, caption: row.caption })
+      list.push({ key: row.storage_path, url, caption: row.caption })
       photosByBooking.set(row.booking_id, list)
     }
   }
@@ -451,7 +451,7 @@ export default async function Dashboard({
                 {photos.length > 0 && (
                   <div className="booking-row-extra" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {photos.map((photo, index) => (
-                      <a key={`${booking.id}-${index}`} href={photo.url} target="_blank" rel="noreferrer">
+                      <a key={photo.key} href={photo.url} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={photo.url}

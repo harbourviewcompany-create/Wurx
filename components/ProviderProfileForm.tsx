@@ -29,7 +29,10 @@ export function ProviderProfileForm({
   const [basePostalCode, setBasePostalCode] = useState(provider.base_postal_code ?? '')
   const [serviceAreas, setServiceAreas] = useState(
     provider.service_areas
-      .filter((a) => a !== (provider.base_postal_code ?? '').toUpperCase().replace(/\s/g, '').slice(0, 3))
+      .filter(
+        (area) =>
+          area !== (provider.base_postal_code ?? '').toUpperCase().replace(/\s/g, '').slice(0, 3),
+      )
       .join(', '),
   )
   const [travelRadiusKm, setTravelRadiusKm] = useState(provider.travel_radius_km)
@@ -38,13 +41,15 @@ export function ProviderProfileForm({
   const [loading, setLoading] = useState(false)
 
   function toggleService(slug: string) {
-    setSelectedSlugs((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
+    setSelectedSlugs((previous) =>
+      previous.includes(slug)
+        ? previous.filter((selectedSlug) => selectedSlug !== slug)
+        : [...previous, slug],
     )
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault()
     setError(null)
     setSaved(false)
 
@@ -60,7 +65,7 @@ export function ProviderProfileForm({
     const baseFsa = normalizedBase.slice(0, 3)
     const areaList = serviceAreas
       .split(',')
-      .map((s) => s.trim().toUpperCase().replace(/\s/g, '').slice(0, 3))
+      .map((area) => area.trim().toUpperCase().replace(/\s/g, '').slice(0, 3))
       .filter(Boolean)
     const uniqueAreas = Array.from(new Set([baseFsa, ...areaList]))
 
@@ -88,7 +93,11 @@ export function ProviderProfileForm({
   return (
     <form className="card" onSubmit={onSubmit}>
       {error && <div className="form-error">{error}</div>}
-      {saved && <p className="form-note" style={{ color: 'var(--brand)' }}>Saved.</p>}
+      {saved && (
+        <p className="form-note" style={{ color: 'var(--brand)' }}>
+          Saved.
+        </p>
+      )}
 
       <label htmlFor="businessName">Business or your name</label>
       <input
@@ -96,28 +105,38 @@ export function ProviderProfileForm({
         type="text"
         required
         value={businessName}
-        onChange={(e) => setBusinessName(e.target.value)}
+        onChange={(event) => setBusinessName(event.target.value)}
       />
 
       <label htmlFor="bio">About you</label>
-      <textarea id="bio" rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
+      <textarea
+        id="bio"
+        rows={3}
+        value={bio}
+        onChange={(event) => setBio(event.target.value)}
+      />
 
-      <label>Services you offer</label>
-      <div className="service-check-grid">
-        {services.map((s) => {
-          const on = selectedSlugs.includes(s.slug)
-          return (
-            <label key={s.slug} className={`service-check${on ? ' is-on' : ''}`}>
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() => toggleService(s.slug)}
-              />
-              <span>{s.name}</span>
-            </label>
-          )
-        })}
-      </div>
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend>Services you offer</legend>
+        <div className="service-check-grid">
+          {services.map((service) => {
+            const selected = selectedSlugs.includes(service.slug)
+            return (
+              <label
+                key={service.slug}
+                className={`service-check${selected ? ' is-on' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => toggleService(service.slug)}
+                />
+                <span>{service.name}</span>
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
 
       <div className="grid grid-2" style={{ gap: 12 }}>
         <div>
@@ -127,7 +146,7 @@ export function ProviderProfileForm({
             type="text"
             required
             value={basePostalCode}
-            onChange={(e) => setBasePostalCode(e.target.value)}
+            onChange={(event) => setBasePostalCode(event.target.value)}
           />
         </div>
         <div>
@@ -138,7 +157,7 @@ export function ProviderProfileForm({
             min={1}
             max={100}
             value={travelRadiusKm}
-            onChange={(e) => setTravelRadiusKm(Math.max(1, Number(e.target.value)))}
+            onChange={(event) => setTravelRadiusKm(Math.max(1, Number(event.target.value)))}
           />
         </div>
       </div>
@@ -148,7 +167,7 @@ export function ProviderProfileForm({
         id="serviceAreas"
         type="text"
         value={serviceAreas}
-        onChange={(e) => setServiceAreas(e.target.value)}
+        onChange={(event) => setServiceAreas(event.target.value)}
         placeholder="K2P, K1S, K1N"
       />
 

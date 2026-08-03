@@ -1,10 +1,10 @@
-// Drains notification email + optional SMS queues.
-// Email: Resend (RESEND_API_KEY). SMS: Twilio (TWILIO_ACCOUNT_SID,
-// TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER). Missing provider keys → drain flags, no-op.
+// Retry-safe email + SMS notification dispatcher (verify_jwt = false).
 //
-// Auth: scheduler calls this with X-Dispatch-Secret (verify_jwt off). Fail closed
-// if Vault cannot be read for the secret. Surface provider failures in the JSON
-// body so ops is not limited to function logs.
+// A scheduler must present the mandatory NOTIFY_DISPATCH_SECRET in
+// X-Dispatch-Secret. Rows are claimed atomically through service-role-only RPCs
+// using FOR UPDATE SKIP LOCKED. Explicit provider rejections are retried with
+// bounded backoff and attempts; ambiguous outcomes and stale started deliveries
+// enter reconciliation and are never auto-resent.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 const KEY_ENV_NAMES = [
@@ -12,6 +12,11 @@ const KEY_ENV_NAMES = [
   'SUPABASE_SECRET_KEY',
   'SERVICE_ROLE_KEY',
 ] as const
+const BATCH = 50
+const CLAIM_TIMEOUT_SECONDS = 15 * 60
+const MAX_DELIVERY_ATTEMPTS = 8
+
+class ProviderRejectedError extends Error {}
 
 function resolveKey(): { name: string; value: string } | null {
   for (const name of KEY_ENV_NAMES) {
@@ -28,13 +33,167 @@ function json(body: unknown, status = 200) {
   })
 }
 
-const BATCH = 50
+function secureEqual(left: string, right: string): boolean {
+  const a = new TextEncoder().encode(left)
+  const b = new TextEncoder().encode(right)
+  let difference = a.length ^ b.length
+  const length = Math.max(a.length, b.length)
+  for (let i = 0; i < length; i++) difference |= (a[i] ?? 0) ^ (b[i] ?? 0)
+  return difference === 0
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function retrySeconds(attempt: number): number {
+  return Math.min(3600, 30 * 2 ** Math.max(0, Math.min(attempt - 1, 7)))
+}
+
+type Channel = 'email' | 'sms'
+type ClaimedNotification = {
+  notification_id: string
+  user_id: string
+  title: string
+  body: string | null
+  attempt_count: number
+  delivery_key: string
+}
+
+async function recoverStaleDeliveries(supabase: SupabaseClient): Promise<number> {
+  const { data, error } = await supabase.rpc(
+    'recover_stale_notification_deliveries',
+    { p_stale_seconds: CLAIM_TIMEOUT_SECONDS },
+  )
+  if (error) throw new Error(`Stale delivery recovery failed: ${error.message}`)
+  return typeof data === 'number' ? data : Number(data ?? 0)
+}
+
+async function claim(
+  supabase: SupabaseClient,
+  channel: Channel,
+  claimToken: string,
+): Promise<ClaimedNotification[]> {
+  const { data, error } = await supabase.rpc('claim_notification_deliveries', {
+    p_channel: channel,
+    p_limit: BATCH,
+    p_claim_token: claimToken,
+  })
+  if (error) throw new Error(`${channel} queue claim failed: ${error.message}`)
+  return (data ?? []) as ClaimedNotification[]
+}
+
+async function startDelivery(
+  supabase: SupabaseClient,
+  channel: Channel,
+  notificationId: string,
+  claimToken: string,
+) {
+  const { data, error } = await supabase.rpc('start_notification_delivery', {
+    p_channel: channel,
+    p_notification_id: notificationId,
+    p_claim_token: claimToken,
+  })
+  if (error || !data) {
+    throw new Error(
+      `${channel} delivery start failed: ${error?.message ?? 'claim token no longer owns the row'}`,
+    )
+  }
+}
+
+async function complete(
+  supabase: SupabaseClient,
+  channel: Channel,
+  notificationId: string,
+  claimToken: string,
+  providerMessageId: string,
+) {
+  const { data, error } = await supabase.rpc('complete_notification_delivery', {
+    p_channel: channel,
+    p_notification_id: notificationId,
+    p_claim_token: claimToken,
+    p_provider_message_id: providerMessageId,
+  })
+  if (error || !data) {
+    throw new Error(
+      `${channel} completion failed: ${error?.message ?? 'claim token no longer owns the row'}`,
+    )
+  }
+}
+
+async function fail(
+  supabase: SupabaseClient,
+  channel: Channel,
+  notification: ClaimedNotification,
+  claimToken: string,
+  error: unknown,
+  retryOverride?: number,
+) {
+  const detail = errorMessage(error).slice(0, 2000)
+  const { data, error: releaseError } = await supabase.rpc(
+    'fail_notification_delivery',
+    {
+      p_channel: channel,
+      p_notification_id: notification.notification_id,
+      p_claim_token: claimToken,
+      p_error: detail,
+      p_retry_seconds: retryOverride ?? retrySeconds(notification.attempt_count),
+    },
+  )
+  if (releaseError || !data) {
+    console.error(
+      `${channel} delivery ${notification.notification_id} failed and its claim could not be released:`,
+      releaseError?.message ?? 'claim token no longer owns the row',
+    )
+  }
+  return detail
+}
+
+async function reconcile(
+  supabase: SupabaseClient,
+  channel: Channel,
+  notification: ClaimedNotification,
+  claimToken: string,
+  error: unknown,
+  providerMessageId: string | null,
+) {
+  const detail = errorMessage(error).slice(0, 2000)
+  const { data, error: reconciliationError } = await supabase.rpc(
+    'mark_notification_delivery_reconciliation',
+    {
+      p_channel: channel,
+      p_notification_id: notification.notification_id,
+      p_claim_token: claimToken,
+      p_error: detail,
+      p_provider_message_id: providerMessageId,
+    },
+  )
+  if (reconciliationError || !data) {
+    console.error(
+      `${channel} delivery ${notification.notification_id} has an ambiguous provider outcome and could not be marked for reconciliation:`,
+      reconciliationError?.message ?? 'claim token no longer owns the row',
+    )
+  }
+  return detail
+}
+
+async function pendingCount(
+  supabase: SupabaseClient,
+  column: 'email_pending' | 'sms_pending',
+) {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq(column, true)
+  if (error) throw new Error(`Queue count failed: ${error.message}`)
+  return count ?? 0
+}
 
 Deno.serve(async (req: Request) => {
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+
   const key = resolveKey()
-  if (!key) {
-    return json({ error: 'No elevated key in the function environment' }, 500)
-  }
+  if (!key) return json({ error: 'No elevated key in the function environment' }, 500)
 
   const supabase: SupabaseClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -45,206 +204,221 @@ Deno.serve(async (req: Request) => {
     name: string,
   ): Promise<{ value: string | null; readable: boolean }> {
     const { data, error } = await supabase.rpc('get_app_secret', { p_name: name })
-    if (error) return { value: null, readable: false }
-    return { value: (data as string) ?? null, readable: true }
+    if (error) {
+      console.error(`Vault read failed for ${name}:`, error.message)
+      return { value: null, readable: false }
+    }
+    const value = typeof data === 'string' ? data.trim() : ''
+    return { value: value || null, readable: true }
   }
 
-  // Shared-secret auth. If Vault can't be read we cannot authenticate the
-  // caller — refuse rather than skipping the check (old behaviour left the
-  // endpoint open when the secret was unreadable).
   const dispatchSecret = await secret('NOTIFY_DISPATCH_SECRET')
-  if (!dispatchSecret.readable) {
+  if (!dispatchSecret.readable || !dispatchSecret.value) {
     return json(
-      {
-        error:
-          'Cannot read the dispatch secret; refusing to run unauthenticated',
-      },
+      { error: 'Notification dispatch secret is unavailable; refusing to run' },
       503,
     )
   }
-  if (dispatchSecret.value) {
-    if (req.headers.get('X-Dispatch-Secret') !== dispatchSecret.value) {
-      return json({ error: 'Forbidden' }, 403)
-    }
+
+  const suppliedSecret = req.headers.get('X-Dispatch-Secret') ?? ''
+  if (!suppliedSecret || !secureEqual(suppliedSecret, dispatchSecret.value)) {
+    return json({ error: 'Forbidden' }, 403)
   }
 
-  const apiKey = (await secret('RESEND_API_KEY')).value
-  const from =
-    (await secret('NOTIFY_FROM_EMAIL')).value ?? 'Wurx <notifications@wurx.ca>'
-  const twilioSid = (await secret('TWILIO_ACCOUNT_SID')).value
-  const twilioToken = (await secret('TWILIO_AUTH_TOKEN')).value
-  const twilioFrom = (await secret('TWILIO_FROM_NUMBER')).value
-  const twilioReady = !!(twilioSid && twilioToken && twilioFrom)
+  const staleRecovered = await recoverStaleDeliveries(supabase)
 
-  let lastError: string | null = null
+  const resend = await secret('RESEND_API_KEY')
+  const fromSecret = await secret('NOTIFY_FROM_EMAIL')
+  const twilioSid = await secret('TWILIO_ACCOUNT_SID')
+  const twilioToken = await secret('TWILIO_AUTH_TOKEN')
+  const twilioFrom = await secret('TWILIO_FROM_NUMBER')
 
-  // ---- Email queue ----
-  const { data: pending, error } = await supabase
-    .from('notifications')
-    .select('id, user_id, kind, title, body')
-    .eq('email_pending', true)
-    .order('created_at', { ascending: true })
-    .limit(BATCH)
-
-  if (error) return json({ error: error.message }, 500)
+  const emailReady = resend.readable && !!resend.value
+  const smsReady =
+    twilioSid.readable && twilioToken.readable && twilioFrom.readable &&
+    !!twilioSid.value && !!twilioToken.value && !!twilioFrom.value
+  const from = fromSecret.value ?? 'Wurx <notifications@wurx.ca>'
 
   let emailSent = 0
-  let emailSkipped = 0
-  const emailPending = pending?.length ?? 0
+  let emailFailed = 0
+  let emailReconciliation = 0
+  let smsSent = 0
+  let smsFailed = 0
+  let smsReconciliation = 0
+  let lastError: string | null = null
 
-  if (pending?.length) {
-    if (!apiKey) {
-      await supabase
-        .from('notifications')
-        .update({ email_pending: false })
-        .in(
-          'id',
-          pending.map((n) => n.id),
+  if (emailReady) {
+    const claimToken = crypto.randomUUID()
+    const claimed = await claim(supabase, 'email', claimToken)
+    const userIds = [...new Set(claimed.map((n) => n.user_id))]
+    const { data: profiles, error: profileError } = userIds.length
+      ? await supabase.from('profiles').select('id, email').in('id', userIds)
+      : { data: [], error: null }
+    if (profileError) throw new Error(`Email recipient lookup failed: ${profileError.message}`)
+    const emailOf = new Map((profiles ?? []).map((p) => [p.id, p.email]))
+
+    for (const notification of claimed) {
+      const to = emailOf.get(notification.user_id)
+      if (!to) {
+        emailFailed++
+        lastError = await fail(
+          supabase, 'email', notification, claimToken,
+          'Recipient email is missing', 86400,
         )
-      emailSkipped = pending.length
-    } else {
-      const userIds = [...new Set(pending.map((n) => n.user_id))]
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .in('id', userIds)
-      const emailOf = new Map((profiles ?? []).map((p) => [p.id, p.email]))
+        continue
+      }
 
-      for (const n of pending) {
-        const to = emailOf.get(n.user_id)
-        if (!to) {
-          emailSkipped++
-          await supabase
-            .from('notifications')
-            .update({ email_pending: false })
-            .eq('id', n.id)
-          continue
+      let providerMessageId: string | null = null
+      try {
+        await startDelivery(
+          supabase, 'email', notification.notification_id, claimToken,
+        )
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resend.value}`,
+            'Content-Type': 'application/json',
+            'Idempotency-Key': notification.delivery_key,
+          },
+          body: JSON.stringify({
+            from,
+            to,
+            subject: notification.title,
+            text: `${notification.title}\n\n${notification.body ?? ''}\n\nhttps://wurx.vercel.app/dashboard`,
+          }),
+        })
+        const responseText = await response.text()
+        if (!response.ok) {
+          throw new ProviderRejectedError(
+            `Resend ${response.status}: ${responseText.slice(0, 500)}`,
+          )
         }
-        try {
-          const res = await fetch('https://api.resend.com/emails', {
+        const provider = JSON.parse(responseText || '{}') as { id?: string }
+        providerMessageId = provider.id ?? notification.delivery_key
+        await complete(
+          supabase, 'email', notification.notification_id,
+          claimToken, providerMessageId,
+        )
+        emailSent++
+      } catch (error) {
+        if (error instanceof ProviderRejectedError) {
+          emailFailed++
+          lastError = await fail(
+            supabase, 'email', notification, claimToken, error,
+          )
+        } else {
+          emailReconciliation++
+          lastError = await reconcile(
+            supabase, 'email', notification, claimToken, error, providerMessageId,
+          )
+        }
+        console.error('Email delivery did not finalize', notification.notification_id, lastError)
+      }
+    }
+  }
+
+  if (smsReady) {
+    const claimToken = crypto.randomUUID()
+    const claimed = await claim(supabase, 'sms', claimToken)
+    const userIds = [...new Set(claimed.map((n) => n.user_id))]
+    const { data: profiles, error: profileError } = userIds.length
+      ? await supabase.from('profiles').select('id, phone').in('id', userIds)
+      : { data: [], error: null }
+    if (profileError) throw new Error(`SMS recipient lookup failed: ${profileError.message}`)
+    const phoneOf = new Map((profiles ?? []).map((p) => [p.id, p.phone]))
+
+    for (const notification of claimed) {
+      const normalized = (phoneOf.get(notification.user_id) ?? '').replace(/[^\d+]/g, '')
+      if (!normalized || normalized.length < 10) {
+        smsFailed++
+        lastError = await fail(
+          supabase, 'sms', notification, claimToken,
+          'Recipient phone number is missing or invalid', 86400,
+        )
+        continue
+      }
+      const e164 = normalized.startsWith('+')
+        ? normalized
+        : `+1${normalized.replace(/^1/, '')}`
+
+      let providerMessageId: string | null = null
+      try {
+        await startDelivery(
+          supabase, 'sms', notification.notification_id, claimToken,
+        )
+        const body = new URLSearchParams({
+          To: e164,
+          From: twilioFrom.value!,
+          Body: `Wurx: ${notification.title}${notification.body ? ` — ${notification.body}` : ''}`.slice(0, 320),
+        })
+        const response = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${twilioSid.value}/Messages.json`,
+          {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
+              Authorization: 'Basic ' + btoa(`${twilioSid.value}:${twilioToken.value}`),
+              'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: JSON.stringify({
-              from,
-              to,
-              subject: n.title,
-              text: `${n.title}\n\n${n.body ?? ''}\n\nhttps://wurx.vercel.app/dashboard`,
-            }),
-          })
-          if (!res.ok) {
-            lastError = `Resend ${res.status}: ${(await res.text()).slice(0, 200)}`
-            console.error('Resend failed', n.id, lastError)
-            continue // leave pending for retry
-          }
-          await supabase
-            .from('notifications')
-            .update({
-              email_pending: false,
-              emailed_at: new Date().toISOString(),
-            })
-            .eq('id', n.id)
-          emailSent++
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err)
-          console.error('Send error', n.id, lastError)
-        }
-      }
-    }
-  }
-
-  // ---- SMS queue ----
-  const { data: smsPending } = await supabase
-    .from('notifications')
-    .select('id, user_id, title, body')
-    .eq('sms_pending', true)
-    .order('created_at', { ascending: true })
-    .limit(BATCH)
-
-  let smsSent = 0
-  let smsSkipped = 0
-  const smsPendingCount = smsPending?.length ?? 0
-
-  if (smsPending?.length) {
-    if (!twilioReady) {
-      await supabase
-        .from('notifications')
-        .update({ sms_pending: false })
-        .in(
-          'id',
-          smsPending.map((n) => n.id),
+            body,
+          },
         )
-      smsSkipped = smsPending.length
-    } else {
-      const userIds = [...new Set(smsPending.map((n) => n.user_id))]
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, phone')
-        .in('id', userIds)
-      const phoneOf = new Map((profiles ?? []).map((p) => [p.id, p.phone]))
-
-      for (const n of smsPending) {
-        const to = (phoneOf.get(n.user_id) ?? '').replace(/[^\d+]/g, '')
-        if (!to || to.length < 10) {
-          smsSkipped++
-          await supabase
-            .from('notifications')
-            .update({ sms_pending: false })
-            .eq('id', n.id)
-          continue
-        }
-        const e164 = to.startsWith('+') ? to : `+1${to.replace(/^1/, '')}`
-        try {
-          const body = new URLSearchParams({
-            To: e164,
-            From: twilioFrom!,
-            Body: `Wurx: ${n.title}${n.body ? ` — ${n.body}` : ''}`.slice(0, 320),
-          })
-          const res = await fetch(
-            `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: 'Basic ' + btoa(`${twilioSid}:${twilioToken}`),
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
-              body,
-            },
+        const responseText = await response.text()
+        if (!response.ok) {
+          throw new ProviderRejectedError(
+            `Twilio ${response.status}: ${responseText.slice(0, 500)}`,
           )
-          if (!res.ok) {
-            lastError = `Twilio ${res.status}: ${(await res.text()).slice(0, 200)}`
-            console.error('Twilio failed', n.id, lastError)
-            continue
-          }
-          await supabase
-            .from('notifications')
-            .update({
-              sms_pending: false,
-              sms_sent_at: new Date().toISOString(),
-            })
-            .eq('id', n.id)
-          smsSent++
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err)
-          console.error('SMS error', n.id, lastError)
         }
+        const provider = JSON.parse(responseText || '{}') as { sid?: string }
+        providerMessageId = provider.sid ?? null
+        if (!providerMessageId) {
+          throw new Error('Twilio accepted the request without returning a Message SID')
+        }
+        await complete(
+          supabase, 'sms', notification.notification_id,
+          claimToken, providerMessageId,
+        )
+        smsSent++
+      } catch (error) {
+        if (error instanceof ProviderRejectedError) {
+          smsFailed++
+          lastError = await fail(
+            supabase, 'sms', notification, claimToken, error,
+          )
+        } else {
+          smsReconciliation++
+          lastError = await reconcile(
+            supabase, 'sms', notification, claimToken, error, providerMessageId,
+          )
+        }
+        console.error('SMS delivery did not finalize', notification.notification_id, lastError)
       }
     }
   }
+
+  const [emailPending, smsPending] = await Promise.all([
+    pendingCount(supabase, 'email_pending'),
+    pendingCount(supabase, 'sms_pending'),
+  ])
 
   return json({
+    recovery: {
+      staleMovedToReconciliation: staleRecovered,
+      claimTimeoutSeconds: CLAIM_TIMEOUT_SECONDS,
+      maxAttempts: MAX_DELIVERY_ATTEMPTS,
+    },
     email: {
+      configured: emailReady,
       sent: emailSent,
-      skipped: emailSkipped,
+      failed: emailFailed,
+      reconciliationRequired: emailReconciliation,
       pending: emailPending,
     },
     sms: {
+      configured: smsReady,
       sent: smsSent,
-      skipped: smsSkipped,
-      pending: smsPendingCount,
-      configured: twilioReady,
+      failed: smsFailed,
+      reconciliationRequired: smsReconciliation,
+      pending: smsPending,
     },
     lastError,
     keySource: key.name,

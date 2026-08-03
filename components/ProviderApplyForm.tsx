@@ -18,13 +18,15 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
   const [loading, setLoading] = useState(false)
 
   function toggleService(slug: string) {
-    setSelectedSlugs((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
+    setSelectedSlugs((previous) =>
+      previous.includes(slug)
+        ? previous.filter((selectedSlug) => selectedSlug !== slug)
+        : [...previous, slug],
     )
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault()
     setError(null)
 
     if (!businessName.trim()) {
@@ -57,12 +59,10 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
     const baseFsa = normalizedBase.slice(0, 3)
     const areaList = serviceAreas
       .split(',')
-      .map((s) => s.trim().toUpperCase().replace(/\s/g, '').slice(0, 3))
+      .map((area) => area.trim().toUpperCase().replace(/\s/g, '').slice(0, 3))
       .filter(Boolean)
     const uniqueAreas = Array.from(new Set([baseFsa, ...areaList]))
 
-    // is_active stays false (DB default) until an admin verifies.
-    // verification = pending puts the application in the admin review queue.
     const { error: insertError } = await supabase.from('providers').insert({
       user_id: user.id,
       business_name: businessName.trim(),
@@ -81,8 +81,6 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
       return
     }
 
-    // Best-effort: mark the profile as a provider for nav/routing. Not fatal
-    // if it fails — the providers row is the source of truth.
     await supabase.from('profiles').update({ role: 'provider' }).eq('id', user.id)
 
     router.push('/provider/dashboard')
@@ -99,7 +97,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         type="text"
         required
         value={businessName}
-        onChange={(e) => setBusinessName(e.target.value)}
+        onChange={(event) => setBusinessName(event.target.value)}
         placeholder="e.g. Campbell Home Services"
       />
 
@@ -108,26 +106,31 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         id="bio"
         rows={3}
         value={bio}
-        onChange={(e) => setBio(e.target.value)}
+        onChange={(event) => setBio(event.target.value)}
         placeholder="Experience, specialties, anything customers should know."
       />
 
-      <label>Services you offer</label>
-      <div className="service-check-grid">
-        {services.map((s) => {
-          const on = selectedSlugs.includes(s.slug)
-          return (
-            <label key={s.slug} className={`service-check${on ? ' is-on' : ''}`}>
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() => toggleService(s.slug)}
-              />
-              <span>{s.name}</span>
-            </label>
-          )
-        })}
-      </div>
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend>Services you offer</legend>
+        <div className="service-check-grid">
+          {services.map((service) => {
+            const selected = selectedSlugs.includes(service.slug)
+            return (
+              <label
+                key={service.slug}
+                className={`service-check${selected ? ' is-on' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => toggleService(service.slug)}
+                />
+                <span>{service.name}</span>
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
 
       <div className="grid grid-2" style={{ gap: 12 }}>
         <div>
@@ -137,7 +140,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
             type="text"
             required
             value={basePostalCode}
-            onChange={(e) => setBasePostalCode(e.target.value)}
+            onChange={(event) => setBasePostalCode(event.target.value)}
             placeholder="K1P 1J1"
           />
         </div>
@@ -149,7 +152,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
             min={1}
             max={100}
             value={travelRadiusKm}
-            onChange={(e) => setTravelRadiusKm(Math.max(1, Number(e.target.value)))}
+            onChange={(event) => setTravelRadiusKm(Math.max(1, Number(event.target.value)))}
           />
         </div>
       </div>
@@ -159,7 +162,7 @@ export function ProviderApplyForm({ services }: { services: Service[] }) {
         id="serviceAreas"
         type="text"
         value={serviceAreas}
-        onChange={(e) => setServiceAreas(e.target.value)}
+        onChange={(event) => setServiceAreas(event.target.value)}
         placeholder="K2P, K1S, K1N"
       />
       <p className="form-note" style={{ marginTop: -4 }}>

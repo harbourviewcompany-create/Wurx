@@ -9,3 +9,17 @@ verify_jwt = true
 # the webhook signature inside the function. JWT verification must stay OFF.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Manual replay operates only on previously signature-verified inbox events and
+# is restricted to authenticated Wurx admins inside the function.
+[functions.stripe-replay]
+verify_jwt = true
+
+# Provider onboarding, status, and admin payouts require an authenticated caller.
+[functions.provider-payouts]
+verify_jwt = true
+
+# Scheduled notification dispatch cannot present a user JWT. It is authenticated
+# by the mandatory NOTIFY_DISPATCH_SECRET checked inside the function.
+[functions.send-notifications]
+verify_jwt = false

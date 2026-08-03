@@ -35,12 +35,12 @@ export function PlanCheckoutButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const btnClass =
-    variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-lg'
+  const btnClass = variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-lg'
 
   if (!priceId) {
     return (
       <button
+        type="button"
         className="btn btn-lg"
         disabled
         title="This plan is not purchasable yet"
@@ -75,8 +75,8 @@ export function PlanCheckoutButton({
 
       const url = await startCheckoutSession(supabase, resolvedPriceId)
       window.location.href = url
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Something went wrong.')
       setLoading(false)
     }
   }
@@ -89,6 +89,7 @@ export function PlanCheckoutButton({
         </div>
       )}
       <button
+        type="button"
         className={btnClass}
         onClick={subscribe}
         disabled={loading}

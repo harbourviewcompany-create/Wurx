@@ -54,9 +54,6 @@ async function ensureStripeCustomer(
   }
   if (profile.stripe_customer_id) return profile.stripe_customer_id
 
-  // Stripe idempotency prevents concurrent requests from creating multiple
-  // customers for the same Supabase user. The conditional database update then
-  // makes the local claim atomic if two function invocations overlap.
   const customer = await stripe.customers.create(
     {
       email: profile.email ?? email,
@@ -127,8 +124,6 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Resolve the commercial entitlement server-side. The client never sends a
-    // price amount, minute amount, plan id, customer id, or user id.
     const { data: plan, error: planError } = await supabase
       .from('plans')
       .select('id, name, monthly_minutes, stripe_price_id')
@@ -163,6 +158,7 @@ Deno.serve(async (req: Request) => {
         metadata: {
           userId,
           plan_id: plan.id,
+          stripe_price_id: priceId,
           monthly_minutes: String(plan.monthly_minutes),
         },
         subscription_data: {
